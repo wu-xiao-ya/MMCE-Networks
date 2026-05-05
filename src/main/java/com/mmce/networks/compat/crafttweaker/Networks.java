@@ -1,0 +1,544 @@
+package com.mmce.networks.compat.crafttweaker;
+
+import com.mmce.networks.common.data.MMCENetworkSavedData;
+import com.mmce.networks.common.handler.ControllerNetworkSyncHandler;
+import com.mmce.networks.common.mmce.MmceReflection;
+import crafttweaker.annotations.ZenRegister;
+import crafttweaker.api.data.IData;
+import crafttweaker.api.minecraft.CraftTweakerMC;
+import github.kasuminova.mmce.common.helper.IMachineController;
+import net.minecraft.nbt.NBTBase;
+import net.minecraft.nbt.NBTTagByte;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagDouble;
+import net.minecraft.nbt.NBTTagInt;
+import net.minecraft.nbt.NBTTagLong;
+import net.minecraft.nbt.NBTTagString;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.world.World;
+import stanhebben.zenscript.annotations.ZenClass;
+import stanhebben.zenscript.annotations.ZenMethod;
+
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
+
+@ZenRegister
+@ZenClass("mods.mmcenetworks.Networks")
+public final class Networks {
+    private static final MmceReflection REFLECTION = new MmceReflection();
+
+    private Networks() {
+    }
+
+    @ZenMethod
+    public static boolean hasNetwork(final IMachineController controller) {
+        return !isNullOrEmpty(getNetworkId(controller));
+    }
+
+    @Nullable
+    @ZenMethod
+    public static String getNetworkId(final IMachineController controller) {
+        TileEntity tile = asTile(controller);
+        return tile == null ? null : REFLECTION.getBoundNetworkId(tile);
+    }
+
+    @ZenMethod
+    public static IData getData(final IMachineController controller) {
+        TileEntity tile = asTile(controller);
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return CraftTweakerMC.getIDataModifyable(context.getSharedData());
+        }
+        return CraftTweakerMC.getIDataModifyable(tile == null ? new NBTTagCompound() : REFLECTION.getSharedData(tile));
+    }
+
+    @ZenMethod
+    public static boolean setData(final IMachineController controller, final IData data) {
+        return setSharedData(controller, CraftTweakerMC.getNBTCompound(data));
+    }
+
+    @ZenMethod
+    public static boolean contains(final IMachineController controller, final String key) {
+        return getTag(controller, key) != null;
+    }
+
+    @Nullable
+    @ZenMethod
+    public static IData get(final IMachineController controller, final String key) {
+        NBTBase value = getTag(controller, key);
+        return value == null ? null : CraftTweakerMC.getIData(value);
+    }
+
+    @ZenMethod
+    public static boolean remove(final IMachineController controller, final String key) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        NBTTagCompound sharedData = context.getSharedData();
+        synchronized (context.getSavedData()) {
+            sharedData = context.getSharedData();
+            if (!sharedData.hasKey(key)) {
+                return false;
+            }
+
+            sharedData.removeTag(key);
+            return context.apply(sharedData);
+        }
+    }
+
+    @ZenMethod
+    public static boolean set(final IMachineController controller, final String key, final IData value) {
+        return setTag(controller, key, CraftTweakerMC.getNBT(value));
+    }
+
+    @ZenMethod
+    public static boolean set(final IMachineController controller, final String expression) {
+        return ExpressionEngine.evaluate(controller, expression);
+    }
+
+    @ZenMethod
+    public static int getInt(final IMachineController controller, final String key, final int defaultValue) {
+        NBTBase value = getTag(controller, key);
+        return value == null ? defaultValue : CraftTweakerMC.getIData(value).asInt();
+    }
+
+    @ZenMethod
+    public static long getLong(final IMachineController controller, final String key, final long defaultValue) {
+        NBTBase value = getTag(controller, key);
+        return value == null ? defaultValue : CraftTweakerMC.getIData(value).asLong();
+    }
+
+    @ZenMethod
+    public static double getDouble(final IMachineController controller, final String key, final double defaultValue) {
+        NBTBase value = getTag(controller, key);
+        return value == null ? defaultValue : CraftTweakerMC.getIData(value).asDouble();
+    }
+
+    @ZenMethod
+    public static boolean getBoolean(final IMachineController controller, final String key, final boolean defaultValue) {
+        NBTBase value = getTag(controller, key);
+        return value == null ? defaultValue : CraftTweakerMC.getIData(value).asBool();
+    }
+
+    @Nullable
+    @ZenMethod
+    public static String getString(final IMachineController controller, final String key, @Nullable final String defaultValue) {
+        NBTBase value = getTag(controller, key);
+        return value == null ? defaultValue : CraftTweakerMC.getIData(value).asString();
+    }
+
+    @ZenMethod
+    public static boolean setInt(final IMachineController controller, final String key, final int value) {
+        return setTag(controller, key, new NBTTagInt(value));
+    }
+
+    @ZenMethod
+    public static boolean setLong(final IMachineController controller, final String key, final long value) {
+        return setTag(controller, key, new NBTTagLong(value));
+    }
+
+    @ZenMethod
+    public static boolean setDouble(final IMachineController controller, final String key, final double value) {
+        return setTag(controller, key, new NBTTagDouble(value));
+    }
+
+    @ZenMethod
+    public static boolean setBoolean(final IMachineController controller, final String key, final boolean value) {
+        return setTag(controller, key, new NBTTagByte((byte) (value ? 1 : 0)));
+    }
+
+    @ZenMethod
+    public static boolean setString(final IMachineController controller, final String key, final String value) {
+        return setTag(controller, key, new NBTTagString(value));
+    }
+
+    @ZenMethod
+    public static int addInt(final IMachineController controller, final String key, final int delta) {
+        return (int) updateNumeric(controller, key, delta, NumericType.INT, false);
+    }
+
+    @ZenMethod
+    public static boolean tryConsumeInt(final IMachineController controller, final String key, final int amount) {
+        if (amount < 0) {
+            return false;
+        }
+
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound sharedData = context.getSharedData();
+            int currentValue = sharedData.hasKey(key) ? CraftTweakerMC.getIData(sharedData.getTag(key)).asInt() : 0;
+            if (currentValue < amount) {
+                return false;
+            }
+
+            sharedData.setInteger(key, currentValue - amount);
+            return context.apply(sharedData);
+        }
+    }
+
+    @ZenMethod
+    public static boolean eval(final IMachineController controller, final String expression) {
+        return ExpressionEngine.evaluate(controller, expression);
+    }
+
+    private static boolean setTag(final IMachineController controller, final String key, final NBTBase value) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound sharedData = context.getSharedData();
+            sharedData.setTag(key, value.copy());
+            return context.apply(sharedData);
+        }
+    }
+
+    private static double updateNumeric(final IMachineController controller, final String key, final double delta, final NumericType type, final boolean overwrite) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0.0D;
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound sharedData = context.getSharedData();
+            double currentValue = sharedData.hasKey(key) ? readNumeric(sharedData.getTag(key)) : 0.0D;
+            double nextValue = overwrite ? delta : currentValue + delta;
+            writeNumeric(sharedData, key, nextValue, type);
+            context.apply(sharedData);
+            return nextValue;
+        }
+    }
+
+    @Nullable
+    private static NBTBase getTag(final IMachineController controller, final String key) {
+        TileEntity tile = asTile(controller);
+        NetworkContext context = getContext(controller);
+        NBTTagCompound sharedData;
+        if (context != null) {
+            synchronized (context.getSavedData()) {
+                sharedData = context.getSharedData();
+            }
+        } else if (tile != null) {
+            sharedData = REFLECTION.getSharedData(tile);
+        } else {
+            return null;
+        }
+        return sharedData.hasKey(key) ? sharedData.getTag(key).copy() : null;
+    }
+
+    private static boolean setSharedData(final IMachineController controller, final NBTTagCompound sharedData) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+        synchronized (context.getSavedData()) {
+            return context.apply(sharedData);
+        }
+    }
+
+    @Nullable
+    private static TileEntity asTile(@Nullable final IMachineController controller) {
+        return controller instanceof TileEntity ? (TileEntity) controller : null;
+    }
+
+    @Nullable
+    private static NetworkContext getContext(@Nullable final IMachineController controller) {
+        TileEntity tile = asTile(controller);
+        if (tile == null) {
+            return null;
+        }
+
+        World world = tile.getWorld();
+        String networkId = REFLECTION.getBoundNetworkId(tile);
+        if (world == null || world.isRemote || isNullOrEmpty(networkId)) {
+            return null;
+        }
+
+        return new NetworkContext(world, tile, networkId);
+    }
+
+    private static boolean isNullOrEmpty(@Nullable final String value) {
+        return value == null || value.isEmpty();
+    }
+
+    private static double readNumeric(final NBTBase tag) {
+        return CraftTweakerMC.getIData(tag).asDouble();
+    }
+
+    private static void writeNumeric(final NBTTagCompound data, final String key, final double value, final NumericType type) {
+        if (type == NumericType.INT) {
+            data.setInteger(key, (int) value);
+        } else if (type == NumericType.LONG) {
+            data.setLong(key, (long) value);
+        } else {
+            data.setDouble(key, value);
+        }
+    }
+
+    private enum NumericType {
+        INT,
+        LONG,
+        DOUBLE
+    }
+
+    private static final class ExpressionEngine {
+        private ExpressionEngine() {
+        }
+
+        private static boolean evaluate(final IMachineController controller, final String expression) {
+            NetworkContext context = getContext(controller);
+            if (context == null) {
+                return false;
+            }
+
+            synchronized (context.getSavedData()) {
+                String[] statements = expression.split(";");
+                NBTTagCompound sharedData = context.getSharedData();
+                for (String rawStatement : statements) {
+                    String statement = rawStatement.trim();
+                    if (statement.isEmpty()) {
+                        continue;
+                    }
+
+                    int assignIndex = findAssignment(statement);
+                    if (assignIndex < 0) {
+                        return false;
+                    }
+
+                    String target = statement.substring(0, assignIndex).trim();
+                    String expr = statement.substring(assignIndex + 1).trim();
+                    if (!isIdentifier(target) || expr.isEmpty()) {
+                        return false;
+                    }
+
+                    double value = new Parser(sharedData, expr).parseExpression();
+                    if (Double.isNaN(value) || Double.isInfinite(value)) {
+                        return false;
+                    }
+
+                    if (!ensureNumericTarget(sharedData, target, value)) {
+                        return false;
+                    }
+                    writeParsedValue(sharedData, target, value, inferType(sharedData, target, value));
+                }
+
+                return context.apply(sharedData);
+            }
+        }
+
+        private static int findAssignment(final String statement) {
+            int depth = 0;
+            for (int i = 0; i < statement.length(); i++) {
+                char c = statement.charAt(i);
+                if (c == '(') {
+                    depth++;
+                } else if (c == ')') {
+                    depth = Math.max(0, depth - 1);
+                } else if (c == '=' && depth == 0) {
+                    if (i + 1 < statement.length() && statement.charAt(i + 1) == '=') {
+                        return -1;
+                    }
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static boolean isIdentifier(final String value) {
+            if (value.isEmpty() || !Character.isJavaIdentifierStart(value.charAt(0))) {
+                return false;
+            }
+            for (int i = 1; i < value.length(); i++) {
+                if (!Character.isJavaIdentifierPart(value.charAt(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static NumericType inferType(final NBTTagCompound data, final String key, final double value) {
+            if (!data.hasKey(key)) {
+                return value == (int) value ? NumericType.INT : NumericType.DOUBLE;
+            }
+            NBTBase tag = data.getTag(key);
+            if (tag instanceof NBTTagLong) {
+                return NumericType.LONG;
+            }
+            if (tag instanceof NBTTagDouble) {
+                return NumericType.DOUBLE;
+            }
+            return NumericType.INT;
+        }
+
+        private static boolean ensureNumericTarget(final NBTTagCompound data, final String key, final double value) {
+            if (!data.hasKey(key)) {
+                return true;
+            }
+            NBTBase tag = data.getTag(key);
+            return tag instanceof NBTTagInt || tag instanceof NBTTagLong || tag instanceof NBTTagDouble || tag instanceof NBTTagByte;
+        }
+
+        private static void writeParsedValue(final NBTTagCompound data, final String key, final double value, final NumericType type) {
+            writeNumeric(data, key, value, type);
+        }
+
+        private static final class Parser {
+            private final NBTTagCompound data;
+            private final String input;
+            private int index;
+
+            private Parser(final NBTTagCompound data, final String input) {
+                this.data = data;
+                this.input = input;
+            }
+
+            private double parseExpression() {
+                double value = parseTerm();
+                while (true) {
+                    skipWhitespace();
+                    if (match('+')) {
+                        value += parseTerm();
+                    } else if (match('-')) {
+                        value -= parseTerm();
+                    } else {
+                        return value;
+                    }
+                }
+            }
+
+            private double parseTerm() {
+                double value = parseFactor();
+                while (true) {
+                    skipWhitespace();
+                    if (match('*')) {
+                        value *= parseFactor();
+                    } else if (match('/')) {
+                        value /= parseFactor();
+                    } else if (match('%')) {
+                        value %= parseFactor();
+                    } else {
+                        return value;
+                    }
+                }
+            }
+
+            private double parseFactor() {
+                skipWhitespace();
+                if (match('+')) {
+                    return parseFactor();
+                }
+                if (match('-')) {
+                    return -parseFactor();
+                }
+                if (match('(')) {
+                    double value = parseExpression();
+                    expect(')');
+                    return value;
+                }
+                if (peekDigit() || peek('.')) {
+                    return parseNumber();
+                }
+                return parseVariable();
+            }
+
+            private double parseNumber() {
+                int start = index;
+                while (index < input.length()) {
+                    char c = input.charAt(index);
+                    if (Character.isDigit(c) || c == '.') {
+                        index++;
+                    } else {
+                        break;
+                    }
+                }
+                return Double.parseDouble(input.substring(start, index));
+            }
+
+            private double parseVariable() {
+                int start = index;
+                if (index < input.length() && Character.isJavaIdentifierStart(input.charAt(index))) {
+                    index++;
+                    while (index < input.length() && Character.isJavaIdentifierPart(input.charAt(index))) {
+                        index++;
+                    }
+                }
+                String name = input.substring(start, index);
+                if (name.isEmpty()) {
+                    throw new IllegalArgumentException("Invalid expression");
+                }
+                NBTBase tag = data.getTag(name);
+                return tag == null ? 0.0D : CraftTweakerMC.getIData(tag).asDouble();
+            }
+
+            private void skipWhitespace() {
+                while (index < input.length() && Character.isWhitespace(input.charAt(index))) {
+                    index++;
+                }
+            }
+
+            private boolean match(final char c) {
+                skipWhitespace();
+                if (index < input.length() && input.charAt(index) == c) {
+                    index++;
+                    return true;
+                }
+                return false;
+            }
+
+            private void expect(final char c) {
+                if (!match(c)) {
+                    throw new IllegalArgumentException("Expected '" + c + "'");
+                }
+            }
+
+            private boolean peek(final char c) {
+                skipWhitespace();
+                return index < input.length() && input.charAt(index) == c;
+            }
+
+            private boolean peekDigit() {
+                skipWhitespace();
+                return index < input.length() && Character.isDigit(input.charAt(index));
+            }
+        }
+    }
+
+    private static final class NetworkContext {
+        private final World world;
+        private final TileEntity tile;
+        private final String networkId;
+
+        private NetworkContext(final World world, final TileEntity tile, final String networkId) {
+            this.world = world;
+            this.tile = tile;
+            this.networkId = networkId;
+        }
+
+        private NBTTagCompound getSharedData() {
+            return getSavedData().getNetworkData(world.provider.getDimension(), networkId);
+        }
+
+        private MMCENetworkSavedData getSavedData() {
+            return MMCENetworkSavedData.get(world);
+        }
+
+        private boolean apply(final NBTTagCompound sharedData) {
+            getSavedData().putNetworkData(world.provider.getDimension(), networkId, sharedData);
+            if (!REFLECTION.setSharedData(tile, networkId, sharedData)) {
+                return false;
+            }
+
+            REFLECTION.markForUpdateSync(tile);
+            ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
+            return true;
+        }
+    }
+}

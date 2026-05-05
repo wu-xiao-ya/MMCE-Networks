@@ -1,0 +1,100 @@
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'maven-publish'
+    id 'com.gtnewhorizons.retrofuturagradle' version '2.0.2'
+}
+
+def prop = { String key, String defaultValue = null ->
+    def value = findProperty(key)
+    value != null ? value.toString() : defaultValue
+}
+
+def propBool = { String key -> prop(key, 'false').toBoolean() }
+
+def propList = { String key, String delimiter = ' ' ->
+    def value = prop(key, '')
+    value ? value.split(delimiter).findAll { it } : []
+}
+
+group = prop('root_package')
+version = prop('mod_version')
+
+base {
+    archivesName = prop('mod_id')
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url = 'https://maven.blamejared.com/'
+    }
+}
+
+dependencies {
+    compileOnly 'CraftTweaker2:CraftTweaker2-MC1120-Main:1.12-4.+'
+    compileOnly files('..\\MMCEGE\\mmce.jar')
+}
+
+minecraft {
+    mcVersion.set('1.12.2')
+    mcpMappingChannel.set(prop('mapping_channel'))
+    mcpMappingVersion.set(prop('mapping_version'))
+    useDependencyAccessTransformers.set(propBool('use_dependency_at_files'))
+    username.set(prop('minecraft_username'))
+    extraTweakClasses.addAll(propList('extra_tweak_classes'))
+    extraRunJvmArguments.addAll(['-ea:' + group])
+    extraRunJvmArguments.addAll(propList('extra_jvm_args'))
+}
+
+processResources {
+    filteringCharset = 'UTF-8'
+    inputs.property 'mod_id', prop('mod_id')
+    inputs.property 'mod_name', prop('mod_name')
+    inputs.property 'mod_version', prop('mod_version')
+    inputs.property 'mod_description', prop('mod_description')
+    inputs.property 'mod_authors', prop('mod_authors')
+    inputs.property 'mod_credits', prop('mod_credits')
+    inputs.property 'mod_url', prop('mod_url')
+    inputs.property 'mod_update_json', prop('mod_update_json')
+    inputs.property 'mod_logo_path', prop('mod_logo_path')
+
+    filesMatching(['mcmod.info', 'pack.mcmeta']) {
+        expand(
+            mod_id: prop('mod_id'),
+            mod_name: prop('mod_name'),
+            mod_version: prop('mod_version'),
+            mod_description: prop('mod_description'),
+            mod_authors: prop('mod_authors'),
+            mod_credits: prop('mod_credits'),
+            mod_url: prop('mod_url'),
+            mod_update_json: prop('mod_update_json'),
+            mod_logo_path: prop('mod_logo_path')
+        )
+    }
+}
+
+jar {
+    manifest {
+        def attributeMap = [:]
+        if (propBool('use_access_transformer')) {
+            attributeMap['FMLAT'] = prop('access_transformer_locations')
+        }
+        attributes(attributeMap)
+    }
+}
+
+tasks.named('jar') {
+    finalizedBy(tasks.named('reobfJar'), tasks.named('sourcesJar'))
+}
