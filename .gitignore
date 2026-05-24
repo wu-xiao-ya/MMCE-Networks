@@ -6,6 +6,7 @@ out/
 *.class
 *.log
 *.tmp
+javac.args
 
 .idea/
 *.iml

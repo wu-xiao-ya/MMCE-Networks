@@ -1,8 +1,11 @@
 package com.mmce.networks.compat.crafttweaker;
 
+import com.mmce.networks.common.data.NetworkResourcePool;
+import com.mmce.networks.common.data.NetworkTechTree;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.handler.ControllerNetworkSyncHandler;
 import com.mmce.networks.common.mmce.MmceReflection;
+import com.mmce.networks.common.util.WorldCompat;
 import crafttweaker.annotations.ZenRegister;
 import crafttweaker.api.data.IData;
 import crafttweaker.api.minecraft.CraftTweakerMC;
@@ -20,9 +23,6 @@ import stanhebben.zenscript.annotations.ZenClass;
 import stanhebben.zenscript.annotations.ZenMethod;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.List;
-
 @ZenRegister
 @ZenClass("mods.mmcenetworks.Networks")
 public final class Networks {
@@ -184,6 +184,298 @@ public final class Networks {
     }
 
     @ZenMethod
+    public static long getCapacity(final IMachineController controller, final String key) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0L;
+        }
+
+        synchronized (context.getSavedData()) {
+            return NetworkResourcePool.getTotalSupply(context.getSharedData(), key);
+        }
+    }
+
+    @ZenMethod
+    public static long getUsed(final IMachineController controller, final String key) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0L;
+        }
+
+        synchronized (context.getSavedData()) {
+            return NetworkResourcePool.getTotalUsage(context.getSharedData(), key);
+        }
+    }
+
+    @ZenMethod
+    public static long getAvailable(final IMachineController controller, final String key) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0L;
+        }
+
+        synchronized (context.getSavedData()) {
+            return NetworkResourcePool.getAvailable(context.getSharedData(), key);
+        }
+    }
+
+    @ZenMethod
+    public static long getSupply(final IMachineController controller, final String key) {
+        return getSupply(controller, key, null);
+    }
+
+    @ZenMethod
+    public static long getSupply(final IMachineController controller, final String key, @Nullable final String source) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0L;
+        }
+
+        synchronized (context.getSavedData()) {
+            return NetworkResourcePool.getSupply(context.getSharedData(), key, context.scopeSource(source));
+        }
+    }
+
+    @ZenMethod
+    public static long getUsage(final IMachineController controller, final String key) {
+        return getUsage(controller, key, null);
+    }
+
+    @ZenMethod
+    public static long getUsage(final IMachineController controller, final String key, @Nullable final String source) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0L;
+        }
+
+        synchronized (context.getSavedData()) {
+            return NetworkResourcePool.getUsage(context.getSharedData(), key, context.scopeSource(source));
+        }
+    }
+
+    @ZenMethod
+    public static long setSupply(final IMachineController controller, final String key, final int amount) {
+        return setSupply(controller, key, null, amount);
+    }
+
+    @ZenMethod
+    public static long setSupply(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0L;
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound sharedData = context.getSharedData();
+            long total = NetworkResourcePool.setSupply(sharedData, key, context.scopeSource(source), amount);
+            context.apply(sharedData);
+            return total;
+        }
+    }
+
+    @ZenMethod
+    public static long clearSupply(final IMachineController controller, final String key) {
+        return clearSupply(controller, key, null);
+    }
+
+    @ZenMethod
+    public static long clearSupply(final IMachineController controller, final String key, @Nullable final String source) {
+        return setSupply(controller, key, source, 0);
+    }
+
+    @ZenMethod
+    public static boolean trySetUsage(final IMachineController controller, final String key, final int amount) {
+        return trySetUsage(controller, key, null, amount);
+    }
+
+    @ZenMethod
+    public static boolean trySetUsage(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound sharedData = context.getSharedData();
+            boolean updated = NetworkResourcePool.trySetUsage(sharedData, key, context.scopeSource(source), amount);
+            return updated && context.apply(sharedData);
+        }
+    }
+
+    @ZenMethod
+    public static boolean tryAddUsage(final IMachineController controller, final String key, final int amount) {
+        return tryAddUsage(controller, key, null, amount);
+    }
+
+    @ZenMethod
+    public static boolean tryAddUsage(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound sharedData = context.getSharedData();
+            boolean updated = NetworkResourcePool.tryAddUsage(sharedData, key, context.scopeSource(source), amount);
+            return updated && context.apply(sharedData);
+        }
+    }
+
+    @ZenMethod
+    public static long releaseUsage(final IMachineController controller, final String key, final int amount) {
+        return releaseUsage(controller, key, null, amount);
+    }
+
+    @ZenMethod
+    public static long releaseUsage(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0L;
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound sharedData = context.getSharedData();
+            long remaining = NetworkResourcePool.releaseUsage(sharedData, key, context.scopeSource(source), amount);
+            context.apply(sharedData);
+            return remaining;
+        }
+    }
+
+    @ZenMethod
+    public static boolean clearUsage(final IMachineController controller, final String key) {
+        return clearUsage(controller, key, null);
+    }
+
+    @ZenMethod
+    public static boolean clearUsage(final IMachineController controller, final String key, @Nullable final String source) {
+        return trySetUsage(controller, key, source, 0);
+    }
+
+    @ZenMethod
+    public static boolean canUse(final IMachineController controller, final String key, final int amount) {
+        if (amount < 0) {
+            return false;
+        }
+        return getAvailable(controller, key) >= amount;
+    }
+
+    @ZenMethod
+    public static IData getAllResourcePools(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return CraftTweakerMC.getIDataModifyable(new NBTTagCompound());
+        }
+
+        synchronized (context.getSavedData()) {
+            return CraftTweakerMC.getIDataModifyable(NetworkResourcePool.getAllPoolsSnapshot(context.getSharedData()));
+        }
+    }
+
+    @ZenMethod
+    public static IData getResourcePool(final IMachineController controller, final String key) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return CraftTweakerMC.getIDataModifyable(new NBTTagCompound());
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound snapshot = NetworkResourcePool.getPoolSnapshot(context.getSharedData(), key);
+            return CraftTweakerMC.getIDataModifyable(snapshot == null ? new NBTTagCompound() : snapshot);
+        }
+    }
+
+    @ZenMethod
+    public static boolean defineTech(final IMachineController controller, final String techId) {
+        return mutateTech(controller, sharedData -> NetworkTechTree.defineTech(sharedData, techId));
+    }
+
+    @ZenMethod
+    public static boolean removeTech(final IMachineController controller, final String techId) {
+        return mutateTech(controller, sharedData -> NetworkTechTree.removeTech(sharedData, techId));
+    }
+
+    @ZenMethod
+    public static boolean addTechPrerequisite(final IMachineController controller, final String techId, final String prerequisiteId) {
+        return mutateTech(controller, sharedData -> NetworkTechTree.addPrerequisite(sharedData, techId, prerequisiteId));
+    }
+
+    @ZenMethod
+    public static boolean removeTechPrerequisite(final IMachineController controller, final String techId, final String prerequisiteId) {
+        return mutateTech(controller, sharedData -> NetworkTechTree.removePrerequisite(sharedData, techId, prerequisiteId));
+    }
+
+    @ZenMethod
+    public static boolean hasTech(final IMachineController controller, final String techId) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        synchronized (context.getSavedData()) {
+            return NetworkTechTree.hasDefinition(context.getSharedData(), techId);
+        }
+    }
+
+    @ZenMethod
+    public static boolean isTechUnlocked(final IMachineController controller, final String techId) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        synchronized (context.getSavedData()) {
+            return NetworkTechTree.isUnlocked(context.getSharedData(), techId);
+        }
+    }
+
+    @ZenMethod
+    public static boolean canUnlockTech(final IMachineController controller, final String techId) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        synchronized (context.getSavedData()) {
+            return NetworkTechTree.canUnlock(context.getSharedData(), techId);
+        }
+    }
+
+    @ZenMethod
+    public static boolean unlockTech(final IMachineController controller, final String techId) {
+        return mutateTech(controller, sharedData -> NetworkTechTree.unlock(sharedData, techId));
+    }
+
+    @ZenMethod
+    public static boolean lockTech(final IMachineController controller, final String techId) {
+        return mutateTech(controller, sharedData -> NetworkTechTree.lock(sharedData, techId));
+    }
+
+    @ZenMethod
+    public static IData getTechTree(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return CraftTweakerMC.getIDataModifyable(new NBTTagCompound());
+        }
+
+        synchronized (context.getSavedData()) {
+            return CraftTweakerMC.getIDataModifyable(NetworkTechTree.getTreeSnapshot(context.getSharedData()));
+        }
+    }
+
+    @ZenMethod
+    public static IData getTech(final IMachineController controller, final String techId) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return CraftTweakerMC.getIDataModifyable(new NBTTagCompound());
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound snapshot = NetworkTechTree.getTechSnapshot(context.getSharedData(), techId);
+            return CraftTweakerMC.getIDataModifyable(snapshot == null ? new NBTTagCompound() : snapshot);
+        }
+    }
+
+    @ZenMethod
     public static boolean eval(final IMachineController controller, final String expression) {
         return ExpressionEngine.evaluate(controller, expression);
     }
@@ -214,6 +506,19 @@ public final class Networks {
             writeNumeric(sharedData, key, nextValue, type);
             context.apply(sharedData);
             return nextValue;
+        }
+    }
+
+    private static boolean mutateTech(final IMachineController controller, final TechMutation mutation) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+
+        synchronized (context.getSavedData()) {
+            NBTTagCompound sharedData = context.getSharedData();
+            boolean changed = mutation.apply(sharedData);
+            return changed && context.apply(sharedData);
         }
     }
 
@@ -258,7 +563,7 @@ public final class Networks {
 
         World world = tile.getWorld();
         String networkId = REFLECTION.getBoundNetworkId(tile);
-        if (world == null || world.isRemote || isNullOrEmpty(networkId)) {
+        if (world == null || WorldCompat.isRemote(world) || isNullOrEmpty(networkId)) {
             return null;
         }
 
@@ -287,6 +592,10 @@ public final class Networks {
         INT,
         LONG,
         DOUBLE
+    }
+
+    private interface TechMutation {
+        boolean apply(NBTTagCompound sharedData);
     }
 
     private static final class ExpressionEngine {
@@ -523,7 +832,7 @@ public final class Networks {
         }
 
         private NBTTagCompound getSharedData() {
-            return getSavedData().getNetworkData(world.provider.getDimension(), networkId);
+            return getSavedData().getNetworkData(WorldCompat.getDimension(world), networkId);
         }
 
         private MMCENetworkSavedData getSavedData() {
@@ -531,7 +840,7 @@ public final class Networks {
         }
 
         private boolean apply(final NBTTagCompound sharedData) {
-            getSavedData().putNetworkData(world.provider.getDimension(), networkId, sharedData);
+            getSavedData().putNetworkData(WorldCompat.getDimension(world), networkId, sharedData);
             if (!REFLECTION.setSharedData(tile, networkId, sharedData)) {
                 return false;
             }
@@ -539,6 +848,11 @@ public final class Networks {
             REFLECTION.markForUpdateSync(tile);
             ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
             return true;
+        }
+
+        private String scopeSource(@Nullable final String source) {
+            String base = WorldCompat.getDimension(world) + ":" + tile.getPos().toLong();
+            return isNullOrEmpty(source) ? base : base + ":" + source;
         }
     }
 }

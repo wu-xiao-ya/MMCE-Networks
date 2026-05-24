@@ -82,6 +82,17 @@ public class MmceReflection {
         return true;
     }
 
+    public boolean clearSharedData(final TileEntity tile) {
+        if (!isControllerTile(tile)) {
+            return false;
+        }
+
+        NBTTagCompound customData = getMutableCustomData(tile);
+        customData.removeTag(ROOT_TAG);
+        setCustomDataTag(tile, customData);
+        return true;
+    }
+
     public void markForUpdateSync(final TileEntity tile) {
         invoke(markForUpdateSyncMethod, tile);
     }

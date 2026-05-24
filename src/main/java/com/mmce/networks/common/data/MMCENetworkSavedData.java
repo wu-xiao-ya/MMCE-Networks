@@ -1,5 +1,6 @@
 package com.mmce.networks.common.data;
 
+import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.world.World;
@@ -8,7 +9,11 @@ import net.minecraft.world.storage.WorldSavedData;
 import net.minecraftforge.common.util.Constants;
 
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 public class MMCENetworkSavedData extends WorldSavedData {
     private static final String DATA_NAME = "mmcenetworks_data";
@@ -25,13 +30,63 @@ public class MMCENetworkSavedData extends WorldSavedData {
     }
 
     public static MMCENetworkSavedData get(final World world) {
-        MapStorage storage = world.getPerWorldStorage();
-        MMCENetworkSavedData data = (MMCENetworkSavedData) storage.getOrLoadData(MMCENetworkSavedData.class, DATA_NAME);
+        MapStorage storage = WorldCompat.getPerWorldStorage(world);
+        if (storage == null) {
+            return new MMCENetworkSavedData();
+        }
+        MMCENetworkSavedData data = loadData(storage);
         if (data == null) {
             data = new MMCENetworkSavedData();
-            storage.setData(DATA_NAME, data);
+            storeData(storage, data);
         }
         return data;
+    }
+
+    private static MMCENetworkSavedData loadData(final MapStorage storage) {
+        try {
+            Method method = MapStorage.class.getMethod("getOrLoadData", Class.class, String.class);
+            Object value = method.invoke(storage, MMCENetworkSavedData.class, DATA_NAME);
+            return value instanceof MMCENetworkSavedData ? (MMCENetworkSavedData) value : null;
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+        }
+
+        try {
+            Method method = MapStorage.class.getMethod("func_75742_a", Class.class, String.class);
+            Object value = method.invoke(storage, MMCENetworkSavedData.class, DATA_NAME);
+            return value instanceof MMCENetworkSavedData ? (MMCENetworkSavedData) value : null;
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+        }
+
+        return null;
+    }
+
+    private static void storeData(final MapStorage storage, final MMCENetworkSavedData data) {
+        try {
+            Method method = MapStorage.class.getMethod("setData", String.class, WorldSavedData.class);
+            method.invoke(storage, DATA_NAME, data);
+            return;
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+        }
+
+        try {
+            Method method = MapStorage.class.getMethod("func_75745_a", String.class, WorldSavedData.class);
+            method.invoke(storage, DATA_NAME, data);
+            return;
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+        }
+
+        try {
+            Method method = MapStorage.class.getMethod("setData", String.class, Object.class);
+            method.invoke(storage, DATA_NAME, data);
+            return;
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+        }
+
+        try {
+            Method method = MapStorage.class.getMethod("func_75745_a", String.class, Object.class);
+            method.invoke(storage, DATA_NAME, data);
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+        }
     }
 
     public NBTTagCompound getNetworkData(final int dimension, final String networkId) {
@@ -81,6 +136,18 @@ public class MMCENetworkSavedData extends WorldSavedData {
         if (controllerSnapshots.remove(new ControllerKey(dimension, pos)) != null) {
             markDirty();
         }
+    }
+
+    public List<Long> getControllerPositions(final int dimension, final String networkId) {
+        List<Long> positions = new ArrayList<>();
+        for (Map.Entry<ControllerKey, ControllerSnapshot> entry : controllerSnapshots.entrySet()) {
+            ControllerKey key = entry.getKey();
+            ControllerSnapshot snapshot = entry.getValue();
+            if (key.dimension == dimension && snapshot.networkId.equals(networkId)) {
+                positions.add(key.pos);
+            }
+        }
+        return positions;
     }
 
     @Override

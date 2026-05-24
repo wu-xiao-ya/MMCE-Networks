@@ -4,6 +4,7 @@ import com.mmce.networks.common.config.MMCENetworksConfig;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.data.MMCENetworkSavedData.ControllerSnapshot;
 import com.mmce.networks.common.mmce.MmceReflection;
+import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.world.World;
@@ -22,19 +23,19 @@ public class ControllerNetworkSyncHandler {
     private final MmceReflection reflection = new MmceReflection();
 
     public static void markNetworkDirty(final World world, final String networkId) {
-        if (world == null || world.isRemote || isNullOrEmpty(networkId)) {
+        if (world == null || WorldCompat.isRemote(world) || isNullOrEmpty(networkId)) {
             return;
         }
-        DIRTY_NETWORKS.add(new DirtyNetworkKey(world.provider.getDimension(), networkId));
+        DIRTY_NETWORKS.add(new DirtyNetworkKey(WorldCompat.getDimension(world), networkId));
     }
 
     @SubscribeEvent
     public void onWorldTick(final TickEvent.WorldTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || event.world.isRemote || !reflection.isAvailable()) {
+        if (event.phase != TickEvent.Phase.END || WorldCompat.isRemote(event.world) || !reflection.isAvailable()) {
             return;
         }
 
-        int dimension = event.world.provider.getDimension();
+        int dimension = WorldCompat.getDimension(event.world);
         Set<String> dirtyNetworkIds = consumeDirtyNetworks(dimension);
         boolean fixedSync = shouldRunFixedSync(event.world);
         if (dirtyNetworkIds.isEmpty() && !fixedSync) {
@@ -42,7 +43,7 @@ public class ControllerNetworkSyncHandler {
         }
 
         MMCENetworkSavedData data = MMCENetworkSavedData.get(event.world);
-        List<TileEntity> loadedTiles = new ArrayList<>(event.world.loadedTileEntityList);
+        List<TileEntity> loadedTiles = WorldCompat.getLoadedTileEntities(event.world);
         for (TileEntity tile : loadedTiles) {
             if (fixedSync || shouldSyncDirtyNetwork(tile, dirtyNetworkIds)) {
                 syncController(data, dimension, tile);
@@ -52,7 +53,7 @@ public class ControllerNetworkSyncHandler {
 
     @SubscribeEvent
     public void onBlockBreak(final BlockEvent.BreakEvent event) {
-        if (event.getWorld().isRemote || !reflection.isAvailable()) {
+        if (WorldCompat.isRemote(event.getWorld()) || !reflection.isAvailable()) {
             return;
         }
 
@@ -62,7 +63,7 @@ public class ControllerNetworkSyncHandler {
         }
 
         MMCENetworkSavedData.get(event.getWorld()).removeControllerSnapshot(
-            event.getWorld().provider.getDimension(),
+            WorldCompat.getDimension(event.getWorld()),
             event.getPos().toLong()
         );
     }
@@ -111,7 +112,7 @@ public class ControllerNetworkSyncHandler {
 
     private static boolean shouldRunFixedSync(final World world) {
         int interval = Math.max(1, MMCENetworksConfig.fallbackSyncIntervalTicks);
-        return world.getTotalWorldTime() % interval == 0;
+        return WorldCompat.getTotalWorldTime(world) % interval == 0;
     }
 
     private static Set<String> consumeDirtyNetworks(final int dimension) {

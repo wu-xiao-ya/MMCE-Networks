@@ -1,67 +1,87 @@
 package com.mmce.networks.client.handler;
 
-import com.mmce.networks.MMCENetworksMod;
+import com.mmce.networks.client.util.ClientCompat;
 import com.mmce.networks.common.item.ItemNetworkLinker;
-import com.mmce.networks.common.mmce.MmceReflection;
+import com.mmce.networks.common.network.MessageRequestHighlightSync;
+import com.mmce.networks.common.network.NetworkHandler;
+import com.mmce.networks.common.util.ItemStackCompat;
+import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.item.ItemStack;
-import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
-import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.relauncher.Side;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
 public class NetworkHighlightRenderer {
-    private static final int CACHE_INTERVAL_TICKS = 10;
-    private static final float RED = 0.2F;
+    private static final int REQUEST_INTERVAL_TICKS = 10;
+    private static final float RED = 0.0F;
     private static final float GREEN = 1.0F;
-    private static final float BLUE = 0.2F;
+    private static final float BLUE = 0.0F;
     private static final float ALPHA = 0.9F;
+    private static final List<BlockPos> HIGHLIGHT_POSITIONS = new ArrayList<>();
 
-    private final MmceReflection reflection = new MmceReflection();
-    private final List<BlockPos> highlightedControllers = new ArrayList<>();
-    private String cachedNetworkId = "";
-    private long lastCacheTick = -1L;
+    private String lastRequestedNetworkId = "";
+    private long lastRequestTick = -1L;
 
-    @Mod.EventBusSubscriber(modid = MMCENetworksMod.MOD_ID, value = Side.CLIENT)
-    public static class EventHooks {
-        private static final NetworkHighlightRenderer INSTANCE = new NetworkHighlightRenderer();
-
-        @SubscribeEvent
-        public static void onRenderWorldLast(final RenderWorldLastEvent event) {
-            INSTANCE.render(event);
+    public static void updateHighlights(final List<BlockPos> positions) {
+        synchronized (HIGHLIGHT_POSITIONS) {
+            HIGHLIGHT_POSITIONS.clear();
+            if (positions != null) {
+                HIGHLIGHT_POSITIONS.addAll(positions);
+            }
         }
     }
 
+    public static void clearHighlights() {
+        synchronized (HIGHLIGHT_POSITIONS) {
+            HIGHLIGHT_POSITIONS.clear();
+        }
+    }
+
+    @SubscribeEvent
+    public void onRenderWorldLast(final RenderWorldLastEvent event) {
+        render(event);
+    }
+
     private void render(final RenderWorldLastEvent event) {
-        Minecraft minecraft = Minecraft.getMinecraft();
-        if (minecraft.player == null || minecraft.world == null || !reflection.isAvailable()) {
+        Minecraft minecraft = ClientCompat.getMinecraft();
+        net.minecraft.world.World world = ClientCompat.getWorld(minecraft);
+        if (minecraft == null || world == null) {
             return;
         }
 
-        String networkId = getHeldNetworkId(minecraft.player.getHeldItemMainhand(), minecraft.player.getHeldItemOffhand());
+        net.minecraft.entity.player.EntityPlayer player = ClientCompat.getPlayer(minecraft);
+        if (player == null) {
+            return;
+        }
+
+        String networkId = getHeldNetworkId(ClientCompat.getMainHand(player), ClientCompat.getOffHand(player));
         if (isNullOrEmpty(networkId)) {
-            highlightedControllers.clear();
-            cachedNetworkId = "";
+            clearHighlights();
+            lastRequestedNetworkId = "";
             return;
         }
 
-        refreshCache(minecraft, networkId);
-        if (highlightedControllers.isEmpty()) {
-            return;
+        requestSyncIfNeeded(world, networkId);
+
+        List<BlockPos> positions;
+        synchronized (HIGHLIGHT_POSITIONS) {
+            if (HIGHLIGHT_POSITIONS.isEmpty()) {
+                return;
+            }
+            positions = new ArrayList<>(HIGHLIGHT_POSITIONS);
         }
 
-        double cameraX = minecraft.player.lastTickPosX + (minecraft.player.posX - minecraft.player.lastTickPosX) * event.getPartialTicks();
-        double cameraY = minecraft.player.lastTickPosY + (minecraft.player.posY - minecraft.player.lastTickPosY) * event.getPartialTicks();
-        double cameraZ = minecraft.player.lastTickPosZ + (minecraft.player.posZ - minecraft.player.lastTickPosZ) * event.getPartialTicks();
+        double cameraX = player.lastTickPosX + (player.posX - player.lastTickPosX) * event.getPartialTicks();
+        double cameraY = player.lastTickPosY + (player.posY - player.lastTickPosY) * event.getPartialTicks();
+        double cameraZ = player.lastTickPosZ + (player.posZ - player.lastTickPosZ) * event.getPartialTicks();
 
         GlStateManager.pushMatrix();
         GlStateManager.enableBlend();
@@ -76,7 +96,7 @@ public class NetworkHighlightRenderer {
         GlStateManager.disableLighting();
         GlStateManager.depthMask(false);
 
-        for (BlockPos pos : highlightedControllers) {
+        for (BlockPos pos : positions) {
             AxisAlignedBB box = new AxisAlignedBB(pos).grow(0.002D).offset(-cameraX, -cameraY, -cameraZ);
             RenderGlobal.drawSelectionBoundingBox(box, RED, GREEN, BLUE, ALPHA);
         }
@@ -88,26 +108,14 @@ public class NetworkHighlightRenderer {
         GlStateManager.popMatrix();
     }
 
-    private void refreshCache(final Minecraft minecraft, final String networkId) {
-        long tick = minecraft.world.getTotalWorldTime();
-        if (networkId.equals(cachedNetworkId) && tick - lastCacheTick < CACHE_INTERVAL_TICKS) {
+    private void requestSyncIfNeeded(final net.minecraft.world.World world, final String networkId) {
+        long tick = WorldCompat.getTotalWorldTime(world);
+        if (networkId.equals(lastRequestedNetworkId) && tick - lastRequestTick < REQUEST_INTERVAL_TICKS) {
             return;
         }
-
-        highlightedControllers.clear();
-        cachedNetworkId = networkId;
-        lastCacheTick = tick;
-
-        for (TileEntity tile : minecraft.world.loadedTileEntityList) {
-            if (!reflection.isControllerTile(tile)) {
-                continue;
-            }
-
-            String controllerNetworkId = reflection.getBoundNetworkId(tile);
-            if (networkId.equals(controllerNetworkId)) {
-                highlightedControllers.add(tile.getPos());
-            }
-        }
+        lastRequestedNetworkId = networkId;
+        lastRequestTick = tick;
+        NetworkHandler.CHANNEL.sendToServer(new MessageRequestHighlightSync());
     }
 
     @Nullable
@@ -118,7 +126,7 @@ public class NetworkHighlightRenderer {
 
     @Nullable
     private static String getNetworkId(final ItemStack stack) {
-        if (stack.isEmpty() || !(stack.getItem() instanceof ItemNetworkLinker)) {
+        if (ItemStackCompat.isEmpty(stack) || !(stack.getItem() instanceof ItemNetworkLinker)) {
             return null;
         }
         return ItemNetworkLinker.getNetworkId(stack);
