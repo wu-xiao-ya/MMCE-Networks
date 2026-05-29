@@ -1,5 +1,6 @@
 package com.mmce.networks.common.handler;
 
+import com.mmce.networks.MMCENetworksMod;
 import com.mmce.networks.common.config.MMCENetworksConfig;
 import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
@@ -23,6 +24,8 @@ import java.util.Set;
 public class ControllerNetworkSyncHandler {
     private static final Object DIRTY_NETWORK_LOCK = new Object();
     private static final Set<DirtyNetworkKey> DIRTY_NETWORKS = new HashSet<>();
+    private static final Map<DirtyNetworkKey, Long> LAST_SYNC_TICKS = new HashMap<>();
+    private static final SyncProfiler PROFILER = new SyncProfiler();
 
     private final MmceReflection reflection = new MmceReflection();
 
@@ -42,20 +45,35 @@ public class ControllerNetworkSyncHandler {
         }
 
         int dimension = WorldCompat.getDimension(event.world);
+        long worldTick = WorldCompat.getTotalWorldTime(event.world);
         TransientSupplyScheduler.process(event.world, dimension);
-        Set<String> dirtyNetworkIds = consumeDirtyNetworks(dimension);
+        Set<String> dirtyNetworkIds = consumeDirtyNetworks(dimension, worldTick);
         boolean fixedSync = shouldRunFixedSync(event.world);
         if (dirtyNetworkIds.isEmpty() && !fixedSync) {
             return;
         }
 
+        long startNanos = PROFILER.isEnabled() ? System.nanoTime() : 0L;
         MMCENetworkSavedData data = MMCENetworkSavedData.get(event.world);
         Map<String, NBTTagCompound> networkSharedDataCache = new HashMap<>();
         List<Long> positions = fixedSync
             ? data.getAllControllerPositions(dimension)
             : getDirtyControllerPositions(data, dimension, dirtyNetworkIds);
+        int updatedControllers = 0;
         for (Long pos : positions) {
-            syncController(data, dimension, event.world, pos.longValue(), networkSharedDataCache);
+            if (syncController(data, dimension, event.world, pos.longValue(), networkSharedDataCache)) {
+                updatedControllers++;
+            }
+        }
+        if (PROFILER.isEnabled()) {
+            PROFILER.recordPass(
+                worldTick,
+                dirtyNetworkIds.size(),
+                positions.size(),
+                updatedControllers,
+                networkSharedDataCache.size(),
+                System.nanoTime() - startNanos
+            );
         }
     }
 
@@ -76,7 +94,7 @@ public class ControllerNetworkSyncHandler {
         );
     }
 
-    private void syncController(
+    private boolean syncController(
         final MMCENetworkSavedData data,
         final int dimension,
         final World world,
@@ -86,13 +104,13 @@ public class ControllerNetworkSyncHandler {
         TileEntity tile = WorldCompat.getTileEntity(world, BlockPos.fromLong(posLong));
         if (!reflection.isControllerTile(tile)) {
             data.removeControllerSnapshot(dimension, posLong);
-            return;
+            return false;
         }
 
         String networkId = reflection.getBoundNetworkId(tile);
         if (isNullOrEmpty(networkId)) {
             data.removeControllerSnapshot(dimension, posLong);
-            return;
+            return false;
         }
 
         NBTTagCompound controllerSharedData = reflection.getSharedData(tile);
@@ -109,8 +127,11 @@ public class ControllerNetworkSyncHandler {
         if (!networkSharedData.equals(controllerSharedData)) {
             reflection.setSharedData(tile, networkId, networkSharedData);
             reflection.markForUpdateSync(tile);
+            data.putControllerSnapshot(dimension, posLong, networkId, networkSharedData);
+            return true;
         }
         data.putControllerSnapshot(dimension, posLong, networkId, networkSharedData);
+        return false;
     }
 
     private static boolean isNullOrEmpty(final String value) {
@@ -134,14 +155,20 @@ public class ControllerNetworkSyncHandler {
         return WorldCompat.getTotalWorldTime(world) % interval == 0;
     }
 
-    private static Set<String> consumeDirtyNetworks(final int dimension) {
+    private static Set<String> consumeDirtyNetworks(final int dimension, final long worldTick) {
         Set<String> result = new HashSet<>();
+        int minInterval = Math.max(1, MMCENetworksConfig.dirtyNetworkSyncIntervalTicks);
         synchronized (DIRTY_NETWORK_LOCK) {
             DIRTY_NETWORKS.removeIf(key -> {
                 if (key.dimension != dimension) {
                     return false;
                 }
+                Long lastSyncTick = LAST_SYNC_TICKS.get(key);
+                if (lastSyncTick != null && worldTick - lastSyncTick.longValue() < minInterval) {
+                    return false;
+                }
                 result.add(key.networkId);
+                LAST_SYNC_TICKS.put(key, worldTick);
                 return true;
             });
         }
@@ -174,6 +201,60 @@ public class ControllerNetworkSyncHandler {
             int result = dimension;
             result = 31 * result + networkId.hashCode();
             return result;
+        }
+    }
+
+    private static final class SyncProfiler {
+        private long dirtyPasses;
+        private long dirtyNetworks;
+        private long controllersVisited;
+        private long controllersUpdated;
+        private long snapshotLoads;
+        private long totalNanos;
+        private long lastLogTick;
+
+        private boolean isEnabled() {
+            return MMCENetworksConfig.enableSyncProfiling;
+        }
+
+        private void recordPass(
+            final long worldTick,
+            final int dirtyNetworkCount,
+            final int controllerCount,
+            final int updatedControllerCount,
+            final int snapshotLoadCount,
+            final long elapsedNanos
+        ) {
+            dirtyPasses++;
+            dirtyNetworks += dirtyNetworkCount;
+            controllersVisited += controllerCount;
+            controllersUpdated += updatedControllerCount;
+            snapshotLoads += snapshotLoadCount;
+            totalNanos += elapsedNanos;
+
+            int interval = Math.max(20, MMCENetworksConfig.profilingLogIntervalTicks);
+            if (worldTick - lastLogTick < interval) {
+                return;
+            }
+
+            long passes = Math.max(1L, dirtyPasses);
+            double avgMs = totalNanos / 1_000_000.0D / passes;
+            MMCENetworksMod.LOGGER.info(
+                "[mmcenetworks] sync profile: passes={}, dirtyNetworks={}, controllersVisited={}, controllersUpdated={}, snapshotLoads={}, avgPassMs={}",
+                dirtyPasses,
+                dirtyNetworks,
+                controllersVisited,
+                controllersUpdated,
+                snapshotLoads,
+                String.format(java.util.Locale.ROOT, "%.3f", avgMs)
+            );
+            dirtyPasses = 0L;
+            dirtyNetworks = 0L;
+            controllersVisited = 0L;
+            controllersUpdated = 0L;
+            snapshotLoads = 0L;
+            totalNanos = 0L;
+            lastLogTick = worldTick;
         }
     }
 }

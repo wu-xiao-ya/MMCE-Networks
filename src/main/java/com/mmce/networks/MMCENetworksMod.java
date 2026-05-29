@@ -6,6 +6,8 @@ import com.mmce.networks.common.network.NetworkHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -21,6 +23,7 @@ public class MMCENetworksMod {
     public static final String MOD_ID = "mmcenetworks";
     public static final String MOD_NAME = "Modular Machinery: Community Edition Networks";
     public static final String VERSION = "0.1.0";
+    public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
 
     @Mod.EventHandler
     public void preInit(final FMLPreInitializationEvent event) {
