@@ -1,14 +1,20 @@
 package com.mmce.networks.common.network;
 
 import com.mmce.networks.api.MMCENetworkApi;
+import com.mmce.networks.common.data.MMCENetworkSavedData;
+import com.mmce.networks.common.data.MMCENetworkSavedData.NetworkRef;
 import com.mmce.networks.common.data.NetworkValueDisplayRegistry;
+import com.mmce.networks.common.util.WorldCompat;
 import io.netty.buffer.ByteBuf;
-import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagList;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.network.ByteBufUtils;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
+
+import java.util.List;
 
 public class MessageRequestNetworkSnapshot implements IMessage {
     private String networkId;
@@ -42,10 +48,30 @@ public class MessageRequestNetworkSnapshot implements IMessage {
             NBTTagCompound sharedData = networkId == null || networkId.isEmpty()
                 ? new NBTTagCompound()
                 : MMCENetworkApi.getSharedData(player.getServerWorld(), networkId);
+            NBTTagCompound networkListData = buildNetworkListData(player);
             NetworkHandler.CHANNEL.sendTo(
-                new MessageSyncNetworkSnapshot(networkId, sharedData, NetworkValueDisplayRegistry.toNbt()),
+                new MessageSyncNetworkSnapshot(networkId, sharedData, NetworkValueDisplayRegistry.toNbt(), networkListData),
                 player
             );
+        }
+
+        private static NBTTagCompound buildNetworkListData(final EntityPlayerMP player) {
+            NBTTagCompound root = new NBTTagCompound();
+            if (player == null || player.world == null) {
+                return root;
+            }
+
+            MMCENetworkSavedData savedData = MMCENetworkSavedData.get(player.world);
+            List<NetworkRef> refs = savedData.getNetworkKeys(WorldCompat.getDimension(player.world));
+            NBTTagList entries = new NBTTagList();
+            for (NetworkRef ref : refs) {
+                NBTTagCompound entry = new NBTTagCompound();
+                entry.setString("id", ref.getNetworkId());
+                entry.setString("displayName", ref.getDisplayName());
+                entries.appendTag(entry);
+            }
+            root.setTag("entries", entries);
+            return root;
         }
     }
 }

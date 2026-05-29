@@ -15,14 +15,21 @@ public class MessageSyncNetworkSnapshot implements IMessage {
     private String networkId;
     private NBTTagCompound sharedData;
     private NBTTagCompound valueDisplayConfig;
+    private NBTTagCompound networkListData;
 
     public MessageSyncNetworkSnapshot() {
     }
 
-    public MessageSyncNetworkSnapshot(final String networkId, final NBTTagCompound sharedData, final NBTTagCompound valueDisplayConfig) {
+    public MessageSyncNetworkSnapshot(
+        final String networkId,
+        final NBTTagCompound sharedData,
+        final NBTTagCompound valueDisplayConfig,
+        final NBTTagCompound networkListData
+    ) {
         this.networkId = networkId == null ? "" : networkId;
         this.sharedData = sharedData == null ? new NBTTagCompound() : sharedData.copy();
         this.valueDisplayConfig = valueDisplayConfig == null ? new NBTTagCompound() : valueDisplayConfig.copy();
+        this.networkListData = networkListData == null ? new NBTTagCompound() : networkListData.copy();
     }
 
     @Override
@@ -30,11 +37,15 @@ public class MessageSyncNetworkSnapshot implements IMessage {
         networkId = ByteBufUtils.readUTF8String(buf);
         sharedData = ByteBufUtils.readTag(buf);
         valueDisplayConfig = ByteBufUtils.readTag(buf);
+        networkListData = ByteBufUtils.readTag(buf);
         if (sharedData == null) {
             sharedData = new NBTTagCompound();
         }
         if (valueDisplayConfig == null) {
             valueDisplayConfig = new NBTTagCompound();
+        }
+        if (networkListData == null) {
+            networkListData = new NBTTagCompound();
         }
     }
 
@@ -43,6 +54,7 @@ public class MessageSyncNetworkSnapshot implements IMessage {
         ByteBufUtils.writeUTF8String(buf, networkId);
         ByteBufUtils.writeTag(buf, sharedData);
         ByteBufUtils.writeTag(buf, valueDisplayConfig);
+        ByteBufUtils.writeTag(buf, networkListData);
     }
 
     public static class Handler implements IMessageHandler<MessageSyncNetworkSnapshot, IMessage> {
@@ -55,7 +67,8 @@ public class MessageSyncNetworkSnapshot implements IMessage {
                     () -> NetworkTerminalClientState.applySnapshot(
                         message.networkId,
                         message.sharedData,
-                        NetworkValueDisplayRegistry.fromNbt(message.valueDisplayConfig)
+                        NetworkValueDisplayRegistry.fromNbt(message.valueDisplayConfig),
+                        NetworkTerminalClientState.readNetworkSummaries(message.networkListData)
                     )
                 );
             }

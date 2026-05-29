@@ -4,6 +4,8 @@ import com.mmce.networks.common.data.NetworkValueDisplayRegistry.ValueDisplaySpe
 import com.mmce.networks.common.network.MessageRequestNetworkSnapshot;
 import com.mmce.networks.common.network.NetworkHandler;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagList;
+import net.minecraftforge.common.util.Constants;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -13,7 +15,9 @@ public final class NetworkTerminalClientState {
     private static String activeNetworkId = "";
     private static NBTTagCompound sharedData = new NBTTagCompound();
     private static List<ValueDisplaySpec> valueDisplaySpecs = new ArrayList<>();
+    private static List<NetworkSummary> availableNetworks = new ArrayList<>();
     private static long lastUpdatedAt = -1L;
+    private static int stateRevision;
     private static boolean loading;
 
     private NetworkTerminalClientState() {
@@ -22,6 +26,7 @@ public final class NetworkTerminalClientState {
     public static void open(final String networkId) {
         activeNetworkId = networkId == null ? "" : networkId;
         loading = true;
+        stateRevision++;
         requestRefresh();
     }
 
@@ -33,14 +38,32 @@ public final class NetworkTerminalClientState {
         NetworkHandler.CHANNEL.sendToServer(new MessageRequestNetworkSnapshot(activeNetworkId));
     }
 
-    public static void applySnapshot(final String networkId, @Nullable final NBTTagCompound data, @Nullable final List<ValueDisplaySpec> specs) {
+    public static void applySnapshot(
+        final String networkId,
+        @Nullable final NBTTagCompound data,
+        @Nullable final List<ValueDisplaySpec> specs,
+        @Nullable final List<NetworkSummary> networks
+    ) {
         if (networkId == null || !networkId.equals(activeNetworkId)) {
             return;
         }
         sharedData = data == null ? new NBTTagCompound() : data.copy();
         valueDisplaySpecs = specs == null ? new ArrayList<>() : new ArrayList<>(specs);
+        availableNetworks = networks == null ? new ArrayList<>() : new ArrayList<>(networks);
         lastUpdatedAt = System.currentTimeMillis();
         loading = false;
+        stateRevision++;
+    }
+
+    public static void selectNetwork(final String networkId) {
+        if (networkId == null || networkId.isEmpty() || networkId.equals(activeNetworkId)) {
+            return;
+        }
+        activeNetworkId = networkId;
+        sharedData = new NBTTagCompound();
+        loading = true;
+        stateRevision++;
+        requestRefresh();
     }
 
     public static String getActiveNetworkId() {
@@ -55,11 +78,72 @@ public final class NetworkTerminalClientState {
         return new ArrayList<>(valueDisplaySpecs);
     }
 
+    public static List<NetworkSummary> getAvailableNetworks() {
+        return new ArrayList<>(availableNetworks);
+    }
+
+    public static List<String> getAvailableNetworkIds() {
+        List<String> ids = new ArrayList<>();
+        for (NetworkSummary summary : availableNetworks) {
+            ids.add(summary.networkId);
+        }
+        return ids;
+    }
+
+    public static String getActiveNetworkDisplayName() {
+        for (NetworkSummary summary : availableNetworks) {
+            if (summary.networkId.equals(activeNetworkId)) {
+                return summary.displayName;
+            }
+        }
+        return activeNetworkId;
+    }
+
     public static long getLastUpdatedAt() {
         return lastUpdatedAt;
     }
 
     public static boolean isLoading() {
         return loading;
+    }
+
+    public static int getStateRevision() {
+        return stateRevision;
+    }
+
+    public static List<NetworkSummary> readNetworkSummaries(@Nullable final NBTTagCompound root) {
+        List<NetworkSummary> result = new ArrayList<>();
+        if (root == null || !root.hasKey("entries", Constants.NBT.TAG_LIST)) {
+            return result;
+        }
+
+        NBTTagList entries = root.getTagList("entries", Constants.NBT.TAG_COMPOUND);
+        for (int i = 0; i < entries.tagCount(); i++) {
+            NBTTagCompound entry = entries.getCompoundTagAt(i);
+            String id = entry.getString("id");
+            String displayName = entry.getString("displayName");
+            if (id != null && !id.isEmpty()) {
+                result.add(new NetworkSummary(id, displayName == null || displayName.isEmpty() ? id : displayName));
+            }
+        }
+        return result;
+    }
+
+    public static final class NetworkSummary {
+        private final String networkId;
+        private final String displayName;
+
+        public NetworkSummary(final String networkId, final String displayName) {
+            this.networkId = networkId;
+            this.displayName = displayName;
+        }
+
+        public String getNetworkId() {
+            return networkId;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
     }
 }

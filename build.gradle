@@ -38,11 +38,18 @@ tasks.withType(JavaCompile).configureEach {
 repositories {
     mavenCentral()
     maven {
+        name = 'Cleanroom Maven'
+        url = 'https://maven.cleanroommc.com'
+    }
+    maven {
         url = 'https://maven.blamejared.com/'
     }
 }
 
 dependencies {
+    api('com.cleanroommc:modularui:2.5.0') {
+        transitive = false
+    }
     compileOnly 'CraftTweaker2:CraftTweaker2-MC1120-Main:1.12-4.+'
     compileOnly files('..\\MMCEGE\\mmce.jar')
 }

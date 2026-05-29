@@ -1,6 +1,7 @@
 package com.mmce.networks.common.item;
 
 import com.mmce.networks.MMCENetworksMod;
+import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.mmce.MmceReflection;
 import com.mmce.networks.common.util.ItemStackCompat;
@@ -105,7 +106,13 @@ public class ItemNetworkLinker extends Item {
             }
             String networkId = createNetworkId();
             setNetworkId(stack, networkId);
-            sendLinkerMessage(player, world, colorPair(TextFormatting.GREEN, "已创建网络: ", TextFormatting.AQUA, networkId), false);
+            MMCENetworkApi.registerNetwork(world, networkId);
+            sendLinkerMessage(
+                player,
+                world,
+                colorPair(TextFormatting.GREEN, "已创建网络: ", TextFormatting.AQUA, MMCENetworkApi.getNetworkDisplayName(world, networkId)),
+                false
+            );
         }
         return new ActionResult<>(EnumActionResult.SUCCESS, stack);
     }
@@ -162,16 +169,28 @@ public class ItemNetworkLinker extends Item {
         if (isNullOrEmpty(networkId)) {
             networkId = createNetworkId();
             setNetworkId(stack, networkId);
-            sendLinkerMessage(player, world, colorPair(TextFormatting.GREEN, "已创建网络: ", TextFormatting.AQUA, networkId), false);
+            MMCENetworkApi.registerNetwork(world, networkId);
+            sendLinkerMessage(
+                player,
+                world,
+                colorPair(TextFormatting.GREEN, "已创建网络: ", TextFormatting.AQUA, MMCENetworkApi.getNetworkDisplayName(world, networkId)),
+                false
+            );
         }
 
         MMCENetworkSavedData data = MMCENetworkSavedData.get(world);
         int dimension = WorldCompat.getDimension(world);
+        data.registerNetwork(dimension, networkId);
         NBTTagCompound sharedData = data.getNetworkData(dimension, networkId);
         reflection.setSharedData(tile, networkId, sharedData);
         reflection.markForUpdateSync(tile);
         data.putControllerSnapshot(dimension, pos.toLong(), networkId, sharedData);
-        sendLinkerMessage(player, world, colorPair(TextFormatting.GREEN, "控制器已绑定到网络: ", TextFormatting.AQUA, networkId), false);
+        sendLinkerMessage(
+            player,
+            world,
+            colorPair(TextFormatting.GREEN, "控制器已绑定到网络: ", TextFormatting.AQUA, data.getNetworkDisplayName(dimension, networkId)),
+            false
+        );
         return EnumActionResult.SUCCESS;
     }
 
@@ -235,7 +254,12 @@ public class ItemNetworkLinker extends Item {
         }
 
         setNetworkId(stack, boundNetworkId);
-        sendLinkerMessage(player, player == null ? null : player.world, colorPair(TextFormatting.GREEN, "已复制控制器网络: ", TextFormatting.AQUA, boundNetworkId), false);
+        sendLinkerMessage(
+            player,
+            player == null ? null : player.world,
+            colorPair(TextFormatting.GREEN, "已复制控制器网络: ", TextFormatting.AQUA, boundNetworkId),
+            false
+        );
     }
 
     private void unbindController(final EntityPlayer player, final World world, final TileEntity tile, final long pos) {

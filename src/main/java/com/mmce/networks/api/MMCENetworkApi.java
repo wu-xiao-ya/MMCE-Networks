@@ -27,6 +27,23 @@ public final class MMCENetworkApi {
         ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
     }
 
+    public static void registerNetwork(final World world, final String networkId) {
+        int dimension = WorldCompat.getDimension(world);
+        MMCENetworkSavedData.get(world).registerNetwork(dimension, networkId);
+        ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
+    }
+
+    public static String getNetworkDisplayName(final World world, final String networkId) {
+        int dimension = WorldCompat.getDimension(world);
+        return MMCENetworkSavedData.get(world).getNetworkDisplayName(dimension, networkId);
+    }
+
+    public static void setNetworkDisplayName(final World world, final String networkId, final String displayName) {
+        int dimension = WorldCompat.getDimension(world);
+        MMCENetworkSavedData.get(world).setNetworkDisplayName(dimension, networkId, displayName);
+        ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
+    }
+
     public static NBTBase getValue(final World world, final String networkId, final String key) {
         NBTTagCompound data = getSharedData(world, networkId);
         return data.hasKey(key) ? data.getTag(key).copy() : null;

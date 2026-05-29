@@ -17,5 +17,6 @@ public final class NetworkHandler {
         CHANNEL.registerMessage(MessageRequestNetworkSnapshot.Handler.class, MessageRequestNetworkSnapshot.class, 2, Side.SERVER);
         CHANNEL.registerMessage(MessageSyncHighlightPositions.Handler.class, MessageSyncHighlightPositions.class, 3, Side.CLIENT);
         CHANNEL.registerMessage(MessageRequestHighlightSync.Handler.class, MessageRequestHighlightSync.class, 4, Side.SERVER);
+        CHANNEL.registerMessage(MessageRenameNetwork.Handler.class, MessageRenameNetwork.class, 5, Side.SERVER);
     }
 }

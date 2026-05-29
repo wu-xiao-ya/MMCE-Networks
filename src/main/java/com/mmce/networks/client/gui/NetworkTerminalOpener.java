@@ -20,7 +20,7 @@ public final class NetworkTerminalOpener {
         }
 
         NetworkTerminalClientState.open(networkId);
-        GuiNetworkTerminal.open(networkId);
+        NetworkTerminalModularScreen.open(networkId);
         return true;
     }
 }

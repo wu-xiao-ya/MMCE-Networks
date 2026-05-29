@@ -21,12 +21,15 @@ import java.lang.reflect.Method;
 
 public class MMCENetworkSavedData extends WorldSavedData {
     private static final String DATA_NAME = "mmcenetworks_data";
+    private static final String DEFAULT_NETWORK_NAME_PREFIX = "网络系统-";
 
     private final Map<NetworkKey, NBTTagCompound> networks = new HashMap<>();
+    private final Map<NetworkKey, String> networkDisplayNames = new HashMap<>();
     private final Map<NetworkPoolKey, NetworkResourcePool.ResourcePoolTotals> resourcePoolTotalsCache = new HashMap<>();
     private final Map<ControllerKey, ControllerSnapshot> controllerSnapshots = new HashMap<>();
     private final Map<Integer, Set<Long>> controllersByDimension = new HashMap<>();
     private final Map<NetworkKey, Set<Long>> controllersByNetwork = new HashMap<>();
+    private int nextNetworkDisplayIndex = 1;
 
     public MMCENetworkSavedData() {
         super(DATA_NAME);
@@ -105,11 +108,13 @@ public class MMCENetworkSavedData extends WorldSavedData {
         NetworkKey key = new NetworkKey(dimension, networkId);
         NBTTagCompound data = networks.get(key);
         if (data != null) {
+            ensureDisplayName(key);
             return data;
         }
 
         data = new NBTTagCompound();
         networks.put(key, data);
+        ensureDisplayName(key);
         markDirty();
         return data;
     }
@@ -151,16 +156,26 @@ public class MMCENetworkSavedData extends WorldSavedData {
         NetworkKey key = new NetworkKey(dimension, networkId);
         NBTTagCompound current = networks.get(key);
         if (current != null && current.equals(data)) {
+            ensureDisplayName(key);
             return;
         }
 
         networks.put(key, data.copy());
+        ensureDisplayName(key);
         invalidateAllResourcePoolTotals(dimension, networkId);
+        markDirty();
+    }
+
+    public void registerNetwork(final int dimension, final String networkId) {
+        NetworkKey key = new NetworkKey(dimension, networkId);
+        networks.computeIfAbsent(key, ignored -> new NBTTagCompound());
+        ensureDisplayName(key);
         markDirty();
     }
 
     public void removeNetwork(final int dimension, final String networkId) {
         if (networks.remove(new NetworkKey(dimension, networkId)) != null) {
+            networkDisplayNames.remove(new NetworkKey(dimension, networkId));
             invalidateAllResourcePoolTotals(dimension, networkId);
             markDirty();
         }
@@ -170,10 +185,26 @@ public class MMCENetworkSavedData extends WorldSavedData {
         List<NetworkRef> refs = new ArrayList<>();
         for (NetworkKey key : networks.keySet()) {
             if (key.dimension == dimension) {
-                refs.add(new NetworkRef(key.dimension, key.networkId));
+                refs.add(new NetworkRef(key.dimension, key.networkId, ensureDisplayName(key)));
             }
         }
+        refs.sort((left, right) -> left.displayName.compareToIgnoreCase(right.displayName));
         return refs;
+    }
+
+    public String getNetworkDisplayName(final int dimension, final String networkId) {
+        return ensureDisplayName(new NetworkKey(dimension, networkId));
+    }
+
+    public void setNetworkDisplayName(final int dimension, final String networkId, final String displayName) {
+        NetworkKey key = new NetworkKey(dimension, networkId);
+        networks.computeIfAbsent(key, ignored -> new NBTTagCompound());
+        String normalized = normalizeDisplayName(displayName);
+        if (normalized.equals(networkDisplayNames.get(key))) {
+            return;
+        }
+        networkDisplayNames.put(key, normalized);
+        markDirty();
     }
 
     public ControllerSnapshot getControllerSnapshot(final int dimension, final long pos) {
@@ -218,10 +249,12 @@ public class MMCENetworkSavedData extends WorldSavedData {
     @Override
     public void readFromNBT(final NBTTagCompound nbt) {
         networks.clear();
+        networkDisplayNames.clear();
         resourcePoolTotalsCache.clear();
         controllerSnapshots.clear();
         controllersByDimension.clear();
         controllersByNetwork.clear();
+        nextNetworkDisplayIndex = Math.max(1, nbt.getInteger("nextNetworkDisplayIndex"));
 
         NBTTagList networkList = nbt.getTagList("networks", Constants.NBT.TAG_COMPOUND);
         for (int i = 0; i < networkList.tagCount(); i++) {
@@ -234,6 +267,17 @@ public class MMCENetworkSavedData extends WorldSavedData {
                 new NetworkKey(entry.getInteger("dimension"), entry.getString("networkId")),
                 entry.getCompoundTag("data").copy()
             );
+        }
+
+        NBTTagList displayNameList = nbt.getTagList("networkDisplayNames", Constants.NBT.TAG_COMPOUND);
+        for (int i = 0; i < displayNameList.tagCount(); i++) {
+            NBTTagCompound entry = displayNameList.getCompoundTagAt(i);
+            if (!entry.hasKey("networkId", Constants.NBT.TAG_STRING) || !entry.hasKey("displayName", Constants.NBT.TAG_STRING)) {
+                continue;
+            }
+
+            NetworkKey key = new NetworkKey(entry.getInteger("dimension"), entry.getString("networkId"));
+            networkDisplayNames.put(key, normalizeDisplayName(entry.getString("displayName")));
         }
 
         NBTTagList snapshotList = nbt.getTagList("controllerSnapshots", Constants.NBT.TAG_COMPOUND);
@@ -252,6 +296,10 @@ public class MMCENetworkSavedData extends WorldSavedData {
             );
             addControllerIndex(dimension, pos, networkId);
         }
+
+        for (NetworkKey key : networks.keySet()) {
+            ensureDisplayName(key);
+        }
     }
 
     @Override
@@ -266,6 +314,17 @@ public class MMCENetworkSavedData extends WorldSavedData {
         }
         compound.setTag("networks", networkList);
 
+        NBTTagList displayNameList = new NBTTagList();
+        for (Map.Entry<NetworkKey, String> entry : networkDisplayNames.entrySet()) {
+            NBTTagCompound tag = new NBTTagCompound();
+            tag.setInteger("dimension", entry.getKey().dimension);
+            tag.setString("networkId", entry.getKey().networkId);
+            tag.setString("displayName", normalizeDisplayName(entry.getValue()));
+            displayNameList.appendTag(tag);
+        }
+        compound.setTag("networkDisplayNames", displayNameList);
+        compound.setInteger("nextNetworkDisplayIndex", Math.max(1, nextNetworkDisplayIndex));
+
         NBTTagList snapshotList = new NBTTagList();
         for (Map.Entry<ControllerKey, ControllerSnapshot> entry : controllerSnapshots.entrySet()) {
             NBTTagCompound tag = new NBTTagCompound();
@@ -278,6 +337,25 @@ public class MMCENetworkSavedData extends WorldSavedData {
         compound.setTag("controllerSnapshots", snapshotList);
 
         return compound;
+    }
+
+    private String ensureDisplayName(final NetworkKey key) {
+        String current = networkDisplayNames.get(key);
+        if (current != null && !current.trim().isEmpty()) {
+            return current;
+        }
+
+        String generated = DEFAULT_NETWORK_NAME_PREFIX + Math.max(1, nextNetworkDisplayIndex++);
+        networkDisplayNames.put(key, generated);
+        return generated;
+    }
+
+    private String normalizeDisplayName(@Nullable final String displayName) {
+        if (displayName == null) {
+            return DEFAULT_NETWORK_NAME_PREFIX + Math.max(1, nextNetworkDisplayIndex++);
+        }
+        String normalized = displayName.trim();
+        return normalized.isEmpty() ? DEFAULT_NETWORK_NAME_PREFIX + Math.max(1, nextNetworkDisplayIndex++) : normalized;
     }
 
     private void addControllerIndex(final int dimension, final long pos, final String networkId) {
@@ -348,10 +426,12 @@ public class MMCENetworkSavedData extends WorldSavedData {
     public static final class NetworkRef {
         private final int dimension;
         private final String networkId;
+        private final String displayName;
 
-        public NetworkRef(final int dimension, final String networkId) {
+        public NetworkRef(final int dimension, final String networkId, final String displayName) {
             this.dimension = dimension;
             this.networkId = networkId;
+            this.displayName = displayName;
         }
 
         public int getDimension() {
@@ -360,6 +440,10 @@ public class MMCENetworkSavedData extends WorldSavedData {
 
         public String getNetworkId() {
             return networkId;
+        }
+
+        public String getDisplayName() {
+            return displayName;
         }
     }
 

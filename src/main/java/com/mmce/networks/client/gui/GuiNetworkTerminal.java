@@ -30,7 +30,19 @@ public class GuiNetworkTerminal extends GuiScreen {
     private static final int TAB_VALUES = 0;
     private static final int TAB_RESOURCES = 1;
     private static final int TAB_TECH = 2;
-    private static final int MAX_VISIBLE_LINES = 10;
+    private static final int BUTTON_TOGGLE_SIDEBAR = 102;
+
+    private static final int PANEL_WIDTH = 368;
+    private static final int PANEL_HEIGHT = 206;
+    private static final int SIDEBAR_WIDTH = 84;
+    private static final int CONTENT_TOP = 72;
+    private static final int CONTENT_BOTTOM = 24;
+    private static final int VISIBLE_LIST_LINES = 10;
+    private static final int VISIBLE_VALUE_CARDS = 3;
+    private static final int VALUE_CARD_HEIGHT = 34;
+    private static final int VALUE_CARD_GAP = 6;
+    private static final int NETWORK_ENTRY_HEIGHT = 18;
+
     private static final int LINE_SECTION = 0;
     private static final int LINE_VALUE = 1;
     private static final int LINE_STAT = 2;
@@ -38,12 +50,13 @@ public class GuiNetworkTerminal extends GuiScreen {
     private static final int LINE_NEGATIVE = 4;
     private static final int LINE_HINT = 5;
 
-    private final String networkId;
+    private final String initialNetworkId;
     private int selectedTab = TAB_VALUES;
     private int scrollOffset;
+    private boolean sidebarOpen = true;
 
     public GuiNetworkTerminal(final String networkId) {
-        this.networkId = networkId;
+        this.initialNetworkId = networkId;
     }
 
     public static void open(final String networkId) {
@@ -56,15 +69,7 @@ public class GuiNetworkTerminal extends GuiScreen {
     @Override
     public void initGui() {
         super.initGui();
-        buttonList.clear();
-
-        int left = width / 2 - 120;
-        int top = height / 2 - 90;
-        buttonList.add(new GuiButton(TAB_VALUES, left, top - 24, 70, 20, translate("gui.mmcenetworks.terminal.tab.values")));
-        buttonList.add(new GuiButton(TAB_RESOURCES, left + 75, top - 24, 70, 20, translate("gui.mmcenetworks.terminal.tab.resources")));
-        buttonList.add(new GuiButton(TAB_TECH, left + 150, top - 24, 70, 20, translate("gui.mmcenetworks.terminal.tab.tech")));
-        buttonList.add(new GuiButton(100, left, top + 184, 80, 20, translate("gui.mmcenetworks.terminal.refresh")));
-        buttonList.add(new GuiButton(101, left + 160, top + 184, 60, 20, translate("gui.mmcenetworks.terminal.close")));
+        rebuildButtons();
     }
 
     @Override
@@ -72,6 +77,7 @@ public class GuiNetworkTerminal extends GuiScreen {
         if (button.id >= TAB_VALUES && button.id <= TAB_TECH) {
             selectedTab = button.id;
             scrollOffset = 0;
+            rebuildButtons();
             return;
         }
         if (button.id == 100) {
@@ -80,6 +86,32 @@ public class GuiNetworkTerminal extends GuiScreen {
         }
         if (button.id == 101) {
             mc.displayGuiScreen(null);
+            return;
+        }
+        if (button.id == BUTTON_TOGGLE_SIDEBAR) {
+            sidebarOpen = !sidebarOpen;
+            scrollOffset = 0;
+            rebuildButtons();
+        }
+    }
+
+    @Override
+    protected void mouseClicked(final int mouseX, final int mouseY, final int mouseButton) throws IOException {
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+        if (mouseButton != 0 || !sidebarOpen) {
+            return;
+        }
+
+        List<String> networkIds = NetworkTerminalClientState.getAvailableNetworkIds();
+        int sidebarLeft = getSidebarLeft();
+        int entryTop = getPanelTop() + 42;
+        for (int i = 0; i < networkIds.size(); i++) {
+            int top = entryTop + i * NETWORK_ENTRY_HEIGHT;
+            if (mouseX >= sidebarLeft + 8 && mouseX <= sidebarLeft + SIDEBAR_WIDTH - 8 && mouseY >= top && mouseY <= top + 14) {
+                NetworkTerminalClientState.selectNetwork(networkIds.get(i));
+                scrollOffset = 0;
+                break;
+            }
         }
     }
 
@@ -92,7 +124,7 @@ public class GuiNetworkTerminal extends GuiScreen {
         }
 
         int direction = delta > 0 ? -1 : 1;
-        int maxOffset = Math.max(0, collectVisibleLines().size() - 10);
+        int maxOffset = Math.max(0, getCurrentEntryCount() - getVisibleCapacity());
         scrollOffset = Math.max(0, Math.min(maxOffset, scrollOffset + direction));
     }
 
@@ -100,46 +132,56 @@ public class GuiNetworkTerminal extends GuiScreen {
     public void drawScreen(final int mouseX, final int mouseY, final float partialTicks) {
         drawDefaultBackground();
 
-        int left = width / 2 - 120;
-        int top = height / 2 - 90;
-        int right = width / 2 + 120;
-        int bottom = top + 178;
+        int left = getPanelLeft();
+        int top = getPanelTop();
+        int right = left + PANEL_WIDTH;
+        int bottom = top + PANEL_HEIGHT;
+        int mainLeft = getMainLeft();
 
-        drawRect(left - 2, top - 2, right + 2, bottom + 2, 0xFF2C2218);
-        drawRect(left, top, right, bottom, 0xE018120E);
-        drawRect(left, top, right, top + 18, 0xFF6A4A22);
-        drawRect(left + 6, top + 62, right - 6, bottom - 18, 0x66110B08);
+        drawRect(left - 3, top - 3, right + 3, bottom + 3, 0xFF2A1E14);
+        drawRect(left, top, right, bottom, 0xE5130F0D);
+        drawRect(left, top, right, top + 22, 0xFF6B4A25);
+        drawRect(left, top + 22, right, top + 23, 0xFFB98B4A);
 
-        String summaryLine = buildSummaryLine();
-        int summaryWidth = fontRenderer.getStringWidth(summaryLine);
-        int networkLineWidth = Math.max(60, right - left - 24 - summaryWidth);
-
-        drawCenteredString(fontRenderer, translate("gui.mmcenetworks.terminal.title"), width / 2, top + 5, 0xFFF8E7B9);
-        drawString(fontRenderer, trimToWidth(translate("gui.mmcenetworks.terminal.network", networkId), networkLineWidth), left + 8, top + 26, 0xFFD7C8A1);
-        drawString(fontRenderer, translate("gui.mmcenetworks.terminal.tab", getTabTitle()), left + 8, top + 38, 0xFFAFD5FF);
-        drawString(fontRenderer, buildStatusLine(), left + 8, top + 50, 0xFF7FE0A7);
-
-        drawString(fontRenderer, summaryLine, right - 8 - summaryWidth, top + 26, 0xFFCEC0A4);
-
-        List<DisplayLine> lines = collectVisibleLines();
-        int lineTop = top + 66;
-        for (int i = 0; i < MAX_VISIBLE_LINES; i++) {
-            int index = scrollOffset + i;
-            if (index >= lines.size()) {
-                break;
-            }
-            DisplayLine line = lines.get(index);
-            drawString(fontRenderer, line.text, left + 10, lineTop + i * 11, pickLineColor(line.kind));
+        if (sidebarOpen) {
+            drawSidebar(left, top, bottom);
+        } else {
+            drawRect(left + 6, top + 28, left + 30, bottom - 10, 0x35150F0D);
         }
 
-        drawScrollBar(left, top, right, bottom, lines.size());
+        drawRect(mainLeft, top + 30, right - 10, bottom - 10, 0x6A120D0B);
+        drawRect(mainLeft, top + CONTENT_TOP, right - 10, top + CONTENT_TOP + 1, 0x55795839);
 
-        if (lines.size() > MAX_VISIBLE_LINES) {
+        drawCenteredString(fontRenderer, translate("gui.mmcenetworks.terminal.title"), width / 2, top + 7, 0xFFF8E7B9);
+
+        String summaryLine = buildSummaryLine();
+        int summaryWidth = fontRenderer.getStringWidth(summaryLine) + 12;
+        int networkLineWidth = Math.max(72, (right - mainLeft - 20) - summaryWidth - 8);
+        String activeNetworkId = getDisplayNetworkId();
+
+        drawString(fontRenderer, trimToWidth(translate("gui.mmcenetworks.terminal.network", activeNetworkId), networkLineWidth), mainLeft + 8, top + 34, 0xFFD7C8A1);
+        drawString(fontRenderer, translate("gui.mmcenetworks.terminal.tab", getTabTitle()), mainLeft + 8, top + 46, 0xFFAFD5FF);
+        drawString(fontRenderer, buildStatusLine(), mainLeft + 8, top + 58, 0xFF7FE0A7);
+
+        drawRect(right - summaryWidth - 12, top + 32, right - 12, top + 46, 0x66402E1D);
+        drawCenteredString(fontRenderer, summaryLine, right - summaryWidth / 2 - 12, top + 35, 0xFFCEC0A4);
+
+        if (selectedTab == TAB_VALUES) {
+            drawValueCards(mainLeft, top, right, collectValueCards(NetworkTerminalClientState.getSharedData()));
+        } else {
+            drawListContent(mainLeft, top, collectVisibleLines());
+        }
+
+        int totalEntries = getCurrentEntryCount();
+        int visibleEntries = getVisibleCapacity();
+        drawScrollBar(mainLeft, top, right, bottom, totalEntries, visibleEntries);
+
+        if (totalEntries > visibleEntries) {
             drawString(
                 fontRenderer,
-                translate("gui.mmcenetworks.terminal.scroll", scrollOffset + 1, Math.max(1, lines.size() - MAX_VISIBLE_LINES + 1)),
-                right - 76,
-                bottom - 12,
+                translate("gui.mmcenetworks.terminal.scroll", scrollOffset + 1, Math.max(1, totalEntries - visibleEntries + 1)),
+                right - 88,
+                bottom - 16,
                 0xFF9D927E
             );
         }
@@ -150,6 +192,54 @@ public class GuiNetworkTerminal extends GuiScreen {
     @Override
     public boolean doesGuiPauseGame() {
         return false;
+    }
+
+    private void rebuildButtons() {
+        buttonList.clear();
+
+        int left = getPanelLeft();
+        int top = getPanelTop();
+        int mainLeft = getMainLeft();
+        int right = left + PANEL_WIDTH;
+
+        buttonList.add(new GuiButton(BUTTON_TOGGLE_SIDEBAR, left + 6, top + 6, 20, 20, sidebarOpen ? "<" : ">"));
+        buttonList.add(new GuiButton(TAB_VALUES, mainLeft, top - 24, 82, 20, translate("gui.mmcenetworks.terminal.tab.values")));
+        buttonList.add(new GuiButton(TAB_RESOURCES, mainLeft + 88, top - 24, 82, 20, translate("gui.mmcenetworks.terminal.tab.resources")));
+        buttonList.add(new GuiButton(TAB_TECH, mainLeft + 176, top - 24, 82, 20, translate("gui.mmcenetworks.terminal.tab.tech")));
+        buttonList.add(new GuiButton(100, mainLeft, top + PANEL_HEIGHT + 6, 94, 20, translate("gui.mmcenetworks.terminal.refresh")));
+        buttonList.add(new GuiButton(101, right - 104, top + PANEL_HEIGHT + 6, 94, 20, translate("gui.mmcenetworks.terminal.close")));
+    }
+
+    private void drawSidebar(final int left, final int top, final int bottom) {
+        int sidebarLeft = getSidebarLeft();
+        int sidebarRight = sidebarLeft + SIDEBAR_WIDTH;
+        drawRect(sidebarLeft, top + 28, sidebarRight, bottom - 10, 0x6A2A1914);
+        drawRect(sidebarRight - 1, top + 28, sidebarRight, bottom - 10, 0xAA74552D);
+        drawString(fontRenderer, translate("gui.mmcenetworks.terminal.networks"), sidebarLeft + 8, top + 32, 0xFFF0CC84);
+
+        List<String> networkIds = NetworkTerminalClientState.getAvailableNetworkIds();
+        String active = getDisplayNetworkId();
+        int entryTop = top + 42;
+        if (networkIds.isEmpty()) {
+            drawString(fontRenderer, translate("gui.mmcenetworks.terminal.networks.empty"), sidebarLeft + 8, entryTop + 4, 0xFFBFB5A7);
+            return;
+        }
+
+        for (int i = 0; i < networkIds.size(); i++) {
+            int y = entryTop + i * NETWORK_ENTRY_HEIGHT;
+            String networkId = networkIds.get(i);
+            boolean selected = networkId.equals(active);
+            if (selected) {
+                drawRect(sidebarLeft + 6, y - 1, sidebarRight - 6, y + 13, 0x88473218);
+            }
+            drawString(
+                fontRenderer,
+                trimToWidth(networkId, SIDEBAR_WIDTH - 18),
+                sidebarLeft + 8,
+                y + 2,
+                selected ? 0xFFF8E7B9 : 0xFFD5C5A7
+            );
+        }
     }
 
     private String buildStatusLine() {
@@ -178,6 +268,11 @@ public class GuiNetworkTerminal extends GuiScreen {
         return translate("gui.mmcenetworks.terminal.tab.values_plain");
     }
 
+    private String getDisplayNetworkId() {
+        String active = NetworkTerminalClientState.getActiveNetworkId();
+        return active == null || active.isEmpty() ? initialNetworkId : active;
+    }
+
     private List<DisplayLine> collectVisibleLines() {
         NBTTagCompound sharedData = NetworkTerminalClientState.getSharedData();
         if (selectedTab == TAB_RESOURCES) {
@@ -186,57 +281,77 @@ public class GuiNetworkTerminal extends GuiScreen {
         if (selectedTab == TAB_TECH) {
             return collectTechLines(sharedData);
         }
-        return collectValueLines(sharedData);
+        return new ArrayList<>();
     }
 
-    private List<DisplayLine> collectValueLines(final NBTTagCompound sharedData) {
-        List<DisplayLine> lines = new ArrayList<>();
+    private List<ValueCard> collectValueCards(final NBTTagCompound sharedData) {
+        List<ValueCard> cards = new ArrayList<>();
         List<ValueDisplaySpec> specs = NetworkTerminalClientState.getValueDisplaySpecs();
         if (!specs.isEmpty()) {
-            return collectConfiguredValueLines(sharedData, specs);
+            for (ValueDisplaySpec spec : specs) {
+                if (!sharedData.hasKey(spec.getKey())) {
+                    continue;
+                }
+
+                String rawValue = formatTagValue(sharedData.getTag(spec.getKey()));
+                String description = spec.getTemplate()
+                    .replace("{name}", spec.getDisplayName())
+                    .replace("{key}", spec.getKey())
+                    .replace("{value}", rawValue);
+                cards.add(new ValueCard(spec.getDisplayName(), description, rawValue));
+            }
+
+            if (!cards.isEmpty()) {
+                return cards;
+            }
         }
 
         List<String> keys = new ArrayList<>(sharedData.getKeySet());
         keys.remove("_resourcePools");
         keys.remove("_techTree");
         keys.sort(Comparator.naturalOrder());
-
-        if (keys.isEmpty()) {
-            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.values.empty")));
-            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.values.hint")));
-            return lines;
-        }
-
         for (String key : keys) {
-            NBTBase tag = sharedData.getTag(key);
-            lines.add(line(LINE_SECTION, translate("gui.mmcenetworks.terminal.values.key", key)));
-            lines.add(line(LINE_VALUE, translate("gui.mmcenetworks.terminal.values.value", formatTagValue(tag))));
+            String rawValue = formatTagValue(sharedData.getTag(key));
+            cards.add(new ValueCard(key, translate("gui.mmcenetworks.terminal.values.raw_description", rawValue), rawValue));
         }
-        return lines;
+        return cards;
     }
 
-    private List<DisplayLine> collectConfiguredValueLines(final NBTTagCompound sharedData, final List<ValueDisplaySpec> specs) {
-        List<DisplayLine> lines = new ArrayList<>();
-        for (ValueDisplaySpec spec : specs) {
-            if (!sharedData.hasKey(spec.getKey())) {
-                continue;
+    private void drawValueCards(final int contentLeft, final int top, final int right, final List<ValueCard> cards) {
+        if (cards.isEmpty()) {
+            drawString(fontRenderer, translate("gui.mmcenetworks.terminal.values.empty"), contentLeft + 14, top + CONTENT_TOP + 10, 0xFFBFB5A7);
+            drawString(fontRenderer, translate("gui.mmcenetworks.terminal.values.hint"), contentLeft + 14, top + CONTENT_TOP + 22, 0xFFBFB5A7);
+            return;
+        }
+
+        int cardWidth = right - contentLeft - 24;
+        int cardLeft = contentLeft + 8;
+        int cardTop = top + CONTENT_TOP + 6;
+        for (int i = 0; i < VISIBLE_VALUE_CARDS; i++) {
+            int index = scrollOffset + i;
+            if (index >= cards.size()) {
+                break;
             }
 
-            NBTBase tag = sharedData.getTag(spec.getKey());
-            String rawValue = formatTagValue(tag);
-            String text = spec.getTemplate()
-                .replace("{name}", spec.getDisplayName())
-                .replace("{key}", spec.getKey())
-                .replace("{value}", rawValue);
-            lines.add(line(LINE_SECTION, spec.getDisplayName()));
-            lines.add(line(LINE_VALUE, text));
-        }
+            ValueCard card = cards.get(index);
+            int y = cardTop + i * (VALUE_CARD_HEIGHT + VALUE_CARD_GAP);
+            drawRect(cardLeft, y, cardLeft + cardWidth, y + VALUE_CARD_HEIGHT, 0x8A23170F);
+            drawRect(cardLeft, y, cardLeft + cardWidth, y + 1, 0xCC7D5A2E);
+            drawRect(cardLeft, y, cardLeft + 1, y + VALUE_CARD_HEIGHT, 0xAA5E4424);
 
-        if (lines.isEmpty()) {
-            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.values.empty")));
-            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.values.config_hint")));
+            String badgeText = card.value;
+            int badgeWidth = Math.min(90, fontRenderer.getStringWidth(badgeText) + 12);
+            int badgeLeft = cardLeft + cardWidth - badgeWidth - 8;
+            drawRect(badgeLeft, y + 6, badgeLeft + badgeWidth, y + 18, 0x884D341A);
+
+            drawString(fontRenderer, trimToWidth(card.title, cardWidth - badgeWidth - 28), cardLeft + 8, y + 6, 0xFFF0CC84);
+            drawCenteredString(fontRenderer, trimToWidth(badgeText, badgeWidth - 8), badgeLeft + badgeWidth / 2, y + 8, 0xFFF8F2E8);
+
+            List<String> descLines = wrapText(card.description, cardWidth - 16);
+            for (int lineIndex = 0; lineIndex < Math.min(2, descLines.size()); lineIndex++) {
+                drawString(fontRenderer, descLines.get(lineIndex), cardLeft + 8, y + 20 + lineIndex * 10, 0xFFE6DCD0);
+            }
         }
-        return lines;
     }
 
     private List<DisplayLine> collectResourceLines(final NBTTagCompound sharedData) {
@@ -311,6 +426,18 @@ public class GuiNetworkTerminal extends GuiScreen {
         return lines;
     }
 
+    private void drawListContent(final int contentLeft, final int top, final List<DisplayLine> lines) {
+        int lineTop = top + CONTENT_TOP + 6;
+        for (int i = 0; i < VISIBLE_LIST_LINES; i++) {
+            int index = scrollOffset + i;
+            if (index >= lines.size()) {
+                break;
+            }
+            DisplayLine line = lines.get(index);
+            drawString(fontRenderer, line.text, contentLeft + 14, lineTop + i * 11, pickLineColor(line.kind));
+        }
+    }
+
     private List<String> sortedKeys(final NBTTagCompound compound) {
         List<String> keys = new ArrayList<>(compound.getKeySet());
         keys.sort(Comparator.naturalOrder());
@@ -337,32 +464,41 @@ public class GuiNetworkTerminal extends GuiScreen {
     }
 
     private String buildSummaryLine() {
-        NBTTagCompound sharedData = NetworkTerminalClientState.getSharedData();
         if (selectedTab == TAB_VALUES) {
-            int count = Math.max(0, sharedData.getKeySet().size() - 2);
-            return translate("gui.mmcenetworks.terminal.summary.entries", count);
+            return translate("gui.mmcenetworks.terminal.summary.entries", collectValueCards(NetworkTerminalClientState.getSharedData()).size());
         }
+
+        NBTTagCompound sharedData = NetworkTerminalClientState.getSharedData();
         if (selectedTab == TAB_RESOURCES) {
-            int count = NetworkResourcePool.getAllPoolsSnapshot(sharedData).getKeySet().size();
-            return translate("gui.mmcenetworks.terminal.summary.pools", count);
+            return translate("gui.mmcenetworks.terminal.summary.pools", NetworkResourcePool.getAllPoolsSnapshot(sharedData).getKeySet().size());
         }
-        int count = NetworkTechTree.getTreeSnapshot(sharedData).getKeySet().size();
-        return translate("gui.mmcenetworks.terminal.summary.techs", count);
+        return translate("gui.mmcenetworks.terminal.summary.techs", NetworkTechTree.getTreeSnapshot(sharedData).getKeySet().size());
     }
 
-    private void drawScrollBar(final int left, final int top, final int right, final int bottom, final int totalLines) {
-        int trackLeft = right - 10;
-        int trackTop = top + 66;
-        int trackBottom = bottom - 22;
+    private int getCurrentEntryCount() {
+        if (selectedTab == TAB_VALUES) {
+            return collectValueCards(NetworkTerminalClientState.getSharedData()).size();
+        }
+        return collectVisibleLines().size();
+    }
+
+    private int getVisibleCapacity() {
+        return selectedTab == TAB_VALUES ? VISIBLE_VALUE_CARDS : VISIBLE_LIST_LINES;
+    }
+
+    private void drawScrollBar(final int contentLeft, final int top, final int right, final int bottom, final int totalLines, final int visibleLines) {
+        int trackLeft = right - 18;
+        int trackTop = top + CONTENT_TOP + 2;
+        int trackBottom = bottom - CONTENT_BOTTOM;
         drawRect(trackLeft, trackTop, trackLeft + 4, trackBottom, 0x553B2D26);
 
-        if (totalLines <= MAX_VISIBLE_LINES) {
+        if (totalLines <= visibleLines) {
             drawRect(trackLeft, trackTop, trackLeft + 4, trackBottom, 0xAA9C805A);
             return;
         }
 
-        int range = totalLines - MAX_VISIBLE_LINES;
-        int thumbHeight = Math.max(12, (trackBottom - trackTop) * MAX_VISIBLE_LINES / totalLines);
+        int range = totalLines - visibleLines;
+        int thumbHeight = Math.max(12, (trackBottom - trackTop) * visibleLines / totalLines);
         int freeSpace = (trackBottom - trackTop) - thumbHeight;
         int thumbTop = trackTop + (range == 0 ? 0 : freeSpace * scrollOffset / range);
         drawRect(trackLeft, thumbTop, trackLeft + 4, thumbTop + thumbHeight, 0xFFD4B27C);
@@ -417,6 +553,11 @@ public class GuiNetworkTerminal extends GuiScreen {
         return tag.toString();
     }
 
+    private List<String> wrapText(final String text, final int maxWidth) {
+        List<String> lines = fontRenderer.listFormattedStringToWidth(text, maxWidth);
+        return lines == null ? new ArrayList<>() : lines;
+    }
+
     private String translate(final String key, final Object... args) {
         return I18n.format(key, args);
     }
@@ -427,6 +568,22 @@ public class GuiNetworkTerminal extends GuiScreen {
         }
         String ellipsis = "...";
         return fontRenderer.trimStringToWidth(text, Math.max(0, maxWidth - fontRenderer.getStringWidth(ellipsis))) + ellipsis;
+    }
+
+    private int getPanelLeft() {
+        return width / 2 - PANEL_WIDTH / 2;
+    }
+
+    private int getPanelTop() {
+        return height / 2 - PANEL_HEIGHT / 2;
+    }
+
+    private int getSidebarLeft() {
+        return getPanelLeft() + 6;
+    }
+
+    private int getMainLeft() {
+        return getPanelLeft() + (sidebarOpen ? SIDEBAR_WIDTH + 12 : 32);
     }
 
     private DisplayLine line(final int kind, final String text) {
@@ -440,6 +597,18 @@ public class GuiNetworkTerminal extends GuiScreen {
         private DisplayLine(final int kind, final String text) {
             this.kind = kind;
             this.text = text;
+        }
+    }
+
+    private static class ValueCard {
+        private final String title;
+        private final String description;
+        private final String value;
+
+        private ValueCard(final String title, final String description, final String value) {
+            this.title = title;
+            this.description = description;
+            this.value = value;
         }
     }
 }

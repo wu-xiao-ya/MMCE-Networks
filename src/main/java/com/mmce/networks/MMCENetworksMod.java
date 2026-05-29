@@ -17,7 +17,7 @@ import java.lang.reflect.Method;
     name = MMCENetworksMod.MOD_NAME,
     version = MMCENetworksMod.VERSION,
     acceptedMinecraftVersions = "[1.12.2]",
-    dependencies = "after:modularmachinery"
+    dependencies = "required-after:modularui;after:modularmachinery"
 )
 public class MMCENetworksMod {
     public static final String MOD_ID = "mmcenetworks";
