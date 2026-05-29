@@ -14,6 +14,8 @@ val keyA = "A";
 val computeKey = "compute";
 val techA = "techA";
 val techB = "techB";
+val techAFlag = "demoTechAUnlocked";
+val techBFlag = "demoTechBUnlocked";
 
 function requireNetwork(event as RecipeCheckEvent) as bool {
     if (!Networks.hasNetwork(event.controller)) {
@@ -23,18 +25,14 @@ function requireNetwork(event as RecipeCheckEvent) as bool {
     return true;
 }
 
-function ensureTechTree(controller as github.kasuminova.mmce.common.helper.IMachineController) {
-    Networks.defineTech(controller, techA);
-    Networks.defineTech(controller, techB);
-    Networks.addTechPrerequisite(controller, techB, techA);
-}
-
 // 机器 A：
 // 输入 1 个圆石，配方完成后把网络变量 A 增加 20。
 RecipeBuilder.newBuilder("network_demo_add_a", machineA, 20)
     .addItemInput(<minecraft:cobblestone> * 1)
     .addFinishHandler(function(event as RecipeFinishEvent) {
-        ensureTechTree(event.controller);
+        Networks.defineTech(event.controller, techA);
+        Networks.defineTech(event.controller, techB);
+        Networks.addTechPrerequisite(event.controller, techB, techA);
         val currentA = Networks.getInt(event.controller, keyA, 0);
         Networks.setInt(event.controller, keyA, currentA + 20);
     })
@@ -64,16 +62,23 @@ RecipeBuilder.newBuilder("network_demo_consume_a", machineB, 20)
     })
     .build();
 
-// 机器 B GUI 显示：
-// 每 tick 把当前网络变量 A 写到控制器状态栏里。
+// 机器 B 每 tick 占用网络侧数据；
+// 如需状态栏显示，请按你当前 MMCE 脚本桥实际暴露的方法单独补。
 MMEvents.onMachinePostTick(machineB, function(event as MachineTickEvent) {
     if (!Networks.hasNetwork(event.controller)) {
-        event.controller.overrideStatusInfo("A = no network");
         return;
     }
 
-    val currentA = Networks.getInt(event.controller, keyA, 0);
-    event.controller.overrideStatusInfo("A = " ~ currentA);
+    Networks.defineTech(event.controller, techA);
+    Networks.defineTech(event.controller, techB);
+    Networks.addTechPrerequisite(event.controller, techB, techA);
+    if (Networks.getBoolean(event.controller, techAFlag, false)) {
+        Networks.unlockTech(event.controller, techA);
+    }
+    if (Networks.getBoolean(event.controller, techBFlag, false)) {
+        Networks.unlockTech(event.controller, techB);
+    }
+    Networks.setString(event.controller, "demoStatusA", "A=" ~ Networks.getInt(event.controller, keyA, 0));
 });
 
 // 网络资源池示例：
@@ -83,7 +88,15 @@ MMEvents.onMachinePostTick(machineA, function(event as MachineTickEvent) {
         return;
     }
 
-    ensureTechTree(event.controller);
+    Networks.defineTech(event.controller, techA);
+    Networks.defineTech(event.controller, techB);
+    Networks.addTechPrerequisite(event.controller, techB, techA);
+    if (Networks.getBoolean(event.controller, techAFlag, false)) {
+        Networks.unlockTech(event.controller, techA);
+    }
+    if (Networks.getBoolean(event.controller, techBFlag, false)) {
+        Networks.unlockTech(event.controller, techB);
+    }
     Networks.setSupply(event.controller, computeKey, 5);
 });
 
@@ -109,13 +122,13 @@ MMEvents.onMachinePostTick(machineB, function(event as MachineTickEvent) {
     }
 
     if (!Networks.trySetUsage(event.controller, computeKey, 3)) {
-        event.controller.overrideStatusInfo("compute busy");
+        Networks.setString(event.controller, "demoComputeStatus", "busy");
         return;
     }
 
     val capacity = Networks.getCapacity(event.controller, computeKey);
     val used = Networks.getUsed(event.controller, computeKey);
-    event.controller.overrideStatusInfo("compute: " ~ used ~ "/" ~ capacity);
+    Networks.setString(event.controller, "demoComputeStatus", used ~ "/" ~ capacity);
 });
 
 // 科技树示例：
@@ -123,7 +136,10 @@ MMEvents.onMachinePostTick(machineB, function(event as MachineTickEvent) {
 RecipeBuilder.newBuilder("network_demo_unlock_techa", machineA, 20)
     .addItemInput(<minecraft:redstone> * 1)
     .addFinishHandler(function(event as RecipeFinishEvent) {
-        ensureTechTree(event.controller);
+        Networks.defineTech(event.controller, techA);
+        Networks.defineTech(event.controller, techB);
+        Networks.addTechPrerequisite(event.controller, techB, techA);
+        Networks.setBoolean(event.controller, techAFlag, true);
         Networks.unlockTech(event.controller, techA);
     })
     .build();
@@ -134,12 +150,15 @@ RecipeBuilder.newBuilder("network_demo_unlock_techb", machineB, 20)
         if (!requireNetwork(event)) {
             return;
         }
-        ensureTechTree(event.controller);
-        if (!Networks.canUnlockTech(event.controller, techB)) {
+        Networks.defineTech(event.controller, techA);
+        Networks.defineTech(event.controller, techB);
+        Networks.addTechPrerequisite(event.controller, techB, techA);
+        if (!Networks.getBoolean(event.controller, techAFlag, false) && !Networks.isTechUnlocked(event.controller, techA)) {
             event.setFailed("need techA");
         }
     })
     .addFinishHandler(function(event as RecipeFinishEvent) {
+        Networks.setBoolean(event.controller, techBFlag, true);
         Networks.unlockTech(event.controller, techB);
     })
     .build();
@@ -151,8 +170,10 @@ RecipeBuilder.newBuilder("network_demo_require_techa", machineB, 20)
         if (!requireNetwork(event)) {
             return;
         }
-        ensureTechTree(event.controller);
-        if (!Networks.isTechUnlocked(event.controller, techA)) {
+        Networks.defineTech(event.controller, techA);
+        Networks.defineTech(event.controller, techB);
+        Networks.addTechPrerequisite(event.controller, techB, techA);
+        if (!Networks.getBoolean(event.controller, techAFlag, false) && !Networks.isTechUnlocked(event.controller, techA)) {
             event.setFailed("techA not unlocked");
         }
     })

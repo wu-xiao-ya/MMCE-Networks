@@ -9,13 +9,17 @@ import javax.annotation.Nullable;
 public final class NetworkResourcePool {
     private static final String ROOT_TAG = "_resourcePools";
     private static final String PROVIDERS_TAG = "providers";
+    private static final String TRANSIENT_PROVIDERS_TAG = "transientProviders";
     private static final String CONSUMERS_TAG = "consumers";
+    private static final String AMOUNT_TAG = "amount";
+    private static final String EXPIRES_AT_TAG = "expiresAt";
 
     private NetworkResourcePool() {
     }
 
     public static long getTotalSupply(final NBTTagCompound sharedData, final String key) {
-        return sumEntries(getEntries(sharedData, key, PROVIDERS_TAG, false));
+        return sumEntries(getEntries(sharedData, key, PROVIDERS_TAG, false))
+            + sumTransientEntries(getTransientEntries(sharedData, key, false));
     }
 
     public static long getTotalUsage(final NBTTagCompound sharedData, final String key) {
@@ -27,7 +31,8 @@ public final class NetworkResourcePool {
     }
 
     public static long getSupply(final NBTTagCompound sharedData, final String key, final String source) {
-        return getEntryAmount(getEntries(sharedData, key, PROVIDERS_TAG, false), source);
+        return getEntryAmount(getEntries(sharedData, key, PROVIDERS_TAG, false), source)
+            + getTransientEntryAmount(getTransientEntries(sharedData, key, false), source);
     }
 
     public static long getUsage(final NBTTagCompound sharedData, final String key, final String source) {
@@ -38,6 +43,33 @@ public final class NetworkResourcePool {
         setEntryAmount(getEntries(sharedData, key, PROVIDERS_TAG, true), source, amount);
         cleanupPool(sharedData, key);
         return getTotalSupply(sharedData, key);
+    }
+
+    public static long setTransientSupply(
+        final NBTTagCompound sharedData,
+        final String key,
+        final String source,
+        final long amount,
+        final long expiresAt
+    ) {
+        setTransientEntry(getTransientEntries(sharedData, key, true), source, amount, expiresAt);
+        cleanupPool(sharedData, key);
+        return getTotalSupply(sharedData, key);
+    }
+
+    public static boolean removeTransientSupply(final NBTTagCompound sharedData, final String key, final String source) {
+        NBTTagCompound entries = getTransientEntries(sharedData, key, false);
+        if (entries == null || isNullOrEmpty(source) || !entries.hasKey(source, 10)) {
+            return false;
+        }
+        entries.removeTag(source);
+        cleanupPool(sharedData, key);
+        return true;
+    }
+
+    public static boolean hasTransientSupply(final NBTTagCompound sharedData, final String key, final String source) {
+        NBTTagCompound entries = getTransientEntries(sharedData, key, false);
+        return entries != null && !isNullOrEmpty(source) && entries.hasKey(source, 10);
     }
 
     public static boolean trySetUsage(final NBTTagCompound sharedData, final String key, final String source, final long amount) {
@@ -157,6 +189,11 @@ public final class NetworkResourcePool {
     }
 
     @Nullable
+    private static NBTTagCompound getTransientEntries(final NBTTagCompound sharedData, final String key, final boolean create) {
+        return getEntries(sharedData, key, TRANSIENT_PROVIDERS_TAG, create);
+    }
+
+    @Nullable
     private static NBTTagCompound getRoot(final NBTTagCompound sharedData, final boolean create) {
         if (sharedData == null) {
             return null;
@@ -185,6 +222,18 @@ public final class NetworkResourcePool {
         return total;
     }
 
+    private static long sumTransientEntries(@Nullable final NBTTagCompound entries) {
+        if (entries == null) {
+            return 0L;
+        }
+
+        long total = 0L;
+        for (String source : entries.getKeySet()) {
+            total += getTransientEntryAmount(entries, source);
+        }
+        return total;
+    }
+
     private static long getEntryAmount(@Nullable final NBTTagCompound entries, final String source) {
         if (entries == null || isNullOrEmpty(source) || !entries.hasKey(source)) {
             return 0L;
@@ -192,6 +241,15 @@ public final class NetworkResourcePool {
 
         NBTBase tag = entries.getTag(source);
         return tag instanceof NBTPrimitive ? ((NBTPrimitive) tag).getLong() : 0L;
+    }
+
+    private static long getTransientEntryAmount(@Nullable final NBTTagCompound entries, final String source) {
+        if (entries == null || isNullOrEmpty(source) || !entries.hasKey(source, 10)) {
+            return 0L;
+        }
+
+        NBTTagCompound entry = entries.getCompoundTag(source);
+        return entry.getLong(AMOUNT_TAG);
     }
 
     private static void setEntryAmount(@Nullable final NBTTagCompound entries, final String source, final long amount) {
@@ -205,6 +263,26 @@ public final class NetworkResourcePool {
         }
     }
 
+    private static void setTransientEntry(
+        @Nullable final NBTTagCompound entries,
+        final String source,
+        final long amount,
+        final long expiresAt
+    ) {
+        if (entries == null || isNullOrEmpty(source)) {
+            return;
+        }
+        if (amount <= 0L) {
+            entries.removeTag(source);
+            return;
+        }
+
+        NBTTagCompound entry = new NBTTagCompound();
+        entry.setLong(AMOUNT_TAG, amount);
+        entry.setLong(EXPIRES_AT_TAG, expiresAt);
+        entries.setTag(source, entry);
+    }
+
     private static void cleanupPool(final NBTTagCompound sharedData, final String key) {
         NBTTagCompound root = getRoot(sharedData, false);
         NBTTagCompound pool = getPool(sharedData, key, false);
@@ -213,6 +291,7 @@ public final class NetworkResourcePool {
         }
 
         cleanupEntries(pool, PROVIDERS_TAG);
+        cleanupEntries(pool, TRANSIENT_PROVIDERS_TAG);
         cleanupEntries(pool, CONSUMERS_TAG);
         if (pool.getKeySet().isEmpty()) {
             root.removeTag(key);

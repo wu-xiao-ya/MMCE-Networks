@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.world.World;
 
 import javax.annotation.Nullable;
@@ -138,6 +139,29 @@ public final class ClientCompat {
             method.invoke(minecraft, task);
         } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
         }
+    }
+
+    @Nullable
+    public static RayTraceResult getObjectMouseOver(final Minecraft minecraft) {
+        if (minecraft == null) {
+            return null;
+        }
+
+        try {
+            Field field = Minecraft.class.getField("objectMouseOver");
+            Object value = field.get(minecraft);
+            return value instanceof RayTraceResult ? (RayTraceResult) value : null;
+        } catch (NoSuchFieldException | IllegalAccessException ignored) {
+        }
+
+        try {
+            Field field = Minecraft.class.getField("field_71476_x");
+            Object value = field.get(minecraft);
+            return value instanceof RayTraceResult ? (RayTraceResult) value : null;
+        } catch (NoSuchFieldException | IllegalAccessException ignored) {
+        }
+
+        return null;
     }
 
     @Nullable

@@ -37,7 +37,7 @@ public class ItemNetworkLinker extends Item {
     private static final String TAG_MODE = "mode";
     private static final String TAG_LAST_ACTION = "lastActionTick";
     private static final String TRANSLATION_KEY = "mmcenetworks.network_linker";
-    private static final long MESSAGE_DEDUP_WINDOW_MS = 300L;
+    private static final long MESSAGE_DEDUP_WINDOW_MS = 1000L;
     private static final Map<String, Long> RECENT_MESSAGES = new HashMap<>();
 
     private final MmceReflection reflection = new MmceReflection();

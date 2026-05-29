@@ -1,23 +1,25 @@
 package com.mmce.networks.common.handler;
 
 import com.mmce.networks.common.config.MMCENetworksConfig;
+import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.data.MMCENetworkSavedData.ControllerSnapshot;
 import com.mmce.networks.common.mmce.MmceReflection;
 import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.world.World;
 import net.minecraftforge.event.world.BlockEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 public class ControllerNetworkSyncHandler {
+    private static final Object DIRTY_NETWORK_LOCK = new Object();
     private static final Set<DirtyNetworkKey> DIRTY_NETWORKS = new HashSet<>();
 
     private final MmceReflection reflection = new MmceReflection();
@@ -26,7 +28,9 @@ public class ControllerNetworkSyncHandler {
         if (world == null || WorldCompat.isRemote(world) || isNullOrEmpty(networkId)) {
             return;
         }
-        DIRTY_NETWORKS.add(new DirtyNetworkKey(WorldCompat.getDimension(world), networkId));
+        synchronized (DIRTY_NETWORK_LOCK) {
+            DIRTY_NETWORKS.add(new DirtyNetworkKey(WorldCompat.getDimension(world), networkId));
+        }
     }
 
     @SubscribeEvent
@@ -43,11 +47,12 @@ public class ControllerNetworkSyncHandler {
         }
 
         MMCENetworkSavedData data = MMCENetworkSavedData.get(event.world);
-        List<TileEntity> loadedTiles = WorldCompat.getLoadedTileEntities(event.world);
-        for (TileEntity tile : loadedTiles) {
-            if (fixedSync || shouldSyncDirtyNetwork(tile, dirtyNetworkIds)) {
-                syncController(data, dimension, tile);
-            }
+        TransientSupplyScheduler.process(event.world, dimension);
+        List<Long> positions = fixedSync
+            ? data.getAllControllerPositions(dimension)
+            : getDirtyControllerPositions(data, dimension, dirtyNetworkIds);
+        for (Long pos : positions) {
+            syncController(data, dimension, event.world, pos.longValue());
         }
     }
 
@@ -68,24 +73,25 @@ public class ControllerNetworkSyncHandler {
         );
     }
 
-    private void syncController(final MMCENetworkSavedData data, final int dimension, final TileEntity tile) {
+    private void syncController(final MMCENetworkSavedData data, final int dimension, final World world, final long posLong) {
+        TileEntity tile = WorldCompat.getTileEntity(world, BlockPos.fromLong(posLong));
         if (!reflection.isControllerTile(tile)) {
+            data.removeControllerSnapshot(dimension, posLong);
             return;
         }
 
-        long pos = tile.getPos().toLong();
         String networkId = reflection.getBoundNetworkId(tile);
         if (isNullOrEmpty(networkId)) {
-            data.removeControllerSnapshot(dimension, pos);
+            data.removeControllerSnapshot(dimension, posLong);
             return;
         }
 
         NBTTagCompound controllerSharedData = reflection.getSharedData(tile);
         NBTTagCompound networkSharedData;
         synchronized (data) {
-            networkSharedData = data.getNetworkData(dimension, networkId);
+            networkSharedData = MMCENetworkApi.getSharedData(world, networkId);
             if (!data.hasNetwork(dimension, networkId)) {
-                data.putNetworkData(dimension, networkId, networkSharedData);
+                data.putNetworkData(dimension, networkId, data.getNetworkData(dimension, networkId));
             }
         }
 
@@ -95,19 +101,23 @@ public class ControllerNetworkSyncHandler {
             reflection.setSharedData(tile, networkId, networkSharedData);
             reflection.markForUpdateSync(tile);
         }
-        data.putControllerSnapshot(dimension, pos, networkId, networkSharedData);
+        data.putControllerSnapshot(dimension, posLong, networkId, networkSharedData);
     }
 
     private static boolean isNullOrEmpty(final String value) {
         return value == null || value.isEmpty();
     }
 
-    private boolean shouldSyncDirtyNetwork(final TileEntity tile, final Set<String> dirtyNetworkIds) {
-        if (dirtyNetworkIds.isEmpty() || !reflection.isControllerTile(tile)) {
-            return false;
+    private List<Long> getDirtyControllerPositions(final MMCENetworkSavedData data, final int dimension, final Set<String> dirtyNetworkIds) {
+        if (dirtyNetworkIds.isEmpty()) {
+            return java.util.Collections.emptyList();
         }
-        String networkId = reflection.getBoundNetworkId(tile);
-        return networkId != null && dirtyNetworkIds.contains(networkId);
+
+        Set<Long> positions = new HashSet<>();
+        for (String networkId : dirtyNetworkIds) {
+            positions.addAll(data.getControllerPositions(dimension, networkId));
+        }
+        return new java.util.ArrayList<>(positions);
     }
 
     private static boolean shouldRunFixedSync(final World world) {
@@ -117,13 +127,15 @@ public class ControllerNetworkSyncHandler {
 
     private static Set<String> consumeDirtyNetworks(final int dimension) {
         Set<String> result = new HashSet<>();
-        DIRTY_NETWORKS.removeIf(key -> {
-            if (key.dimension != dimension) {
-                return false;
-            }
-            result.add(key.networkId);
-            return true;
-        });
+        synchronized (DIRTY_NETWORK_LOCK) {
+            DIRTY_NETWORKS.removeIf(key -> {
+                if (key.dimension != dimension) {
+                    return false;
+                }
+                result.add(key.networkId);
+                return true;
+            });
+        }
         return result;
     }
 

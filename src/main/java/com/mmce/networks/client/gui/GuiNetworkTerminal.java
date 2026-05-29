@@ -6,6 +6,7 @@ import com.mmce.networks.common.data.NetworkTechTree;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.resources.I18n;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagCompound;
 
@@ -23,6 +24,13 @@ public class GuiNetworkTerminal extends GuiScreen {
     private static final int TAB_VALUES = 0;
     private static final int TAB_RESOURCES = 1;
     private static final int TAB_TECH = 2;
+    private static final int MAX_VISIBLE_LINES = 10;
+    private static final int LINE_SECTION = 0;
+    private static final int LINE_VALUE = 1;
+    private static final int LINE_STAT = 2;
+    private static final int LINE_POSITIVE = 3;
+    private static final int LINE_NEGATIVE = 4;
+    private static final int LINE_HINT = 5;
 
     private final String networkId;
     private int selectedTab = TAB_VALUES;
@@ -46,11 +54,11 @@ public class GuiNetworkTerminal extends GuiScreen {
 
         int left = width / 2 - 120;
         int top = height / 2 - 90;
-        buttonList.add(new GuiButton(TAB_VALUES, left, top - 24, 70, 20, "数值"));
-        buttonList.add(new GuiButton(TAB_RESOURCES, left + 75, top - 24, 70, 20, "资源池"));
-        buttonList.add(new GuiButton(TAB_TECH, left + 150, top - 24, 70, 20, "科技"));
-        buttonList.add(new GuiButton(100, left, top + 184, 80, 20, "刷新"));
-        buttonList.add(new GuiButton(101, left + 160, top + 184, 60, 20, "关闭"));
+        buttonList.add(new GuiButton(TAB_VALUES, left, top - 24, 70, 20, translate("gui.mmcenetworks.terminal.tab.values")));
+        buttonList.add(new GuiButton(TAB_RESOURCES, left + 75, top - 24, 70, 20, translate("gui.mmcenetworks.terminal.tab.resources")));
+        buttonList.add(new GuiButton(TAB_TECH, left + 150, top - 24, 70, 20, translate("gui.mmcenetworks.terminal.tab.tech")));
+        buttonList.add(new GuiButton(100, left, top + 184, 80, 20, translate("gui.mmcenetworks.terminal.refresh")));
+        buttonList.add(new GuiButton(101, left + 160, top + 184, 60, 20, translate("gui.mmcenetworks.terminal.close")));
     }
 
     @Override
@@ -94,27 +102,36 @@ public class GuiNetworkTerminal extends GuiScreen {
         drawRect(left - 2, top - 2, right + 2, bottom + 2, 0xFF2C2218);
         drawRect(left, top, right, bottom, 0xE018120E);
         drawRect(left, top, right, top + 18, 0xFF6A4A22);
+        drawRect(left + 6, top + 62, right - 6, bottom - 18, 0x66110B08);
 
-        drawCenteredString(fontRenderer, "MMCE Networks Terminal", width / 2, top + 5, 0xFFF8E7B9);
-        drawString(fontRenderer, "Network: " + networkId, left + 8, top + 26, 0xFFD7C8A1);
-        drawString(fontRenderer, "Tab: " + getTabTitle(), left + 8, top + 38, 0xFFAFD5FF);
+        String summaryLine = buildSummaryLine();
+        int summaryWidth = fontRenderer.getStringWidth(summaryLine);
+        int networkLineWidth = Math.max(60, right - left - 24 - summaryWidth);
+
+        drawCenteredString(fontRenderer, translate("gui.mmcenetworks.terminal.title"), width / 2, top + 5, 0xFFF8E7B9);
+        drawString(fontRenderer, trimToWidth(translate("gui.mmcenetworks.terminal.network", networkId), networkLineWidth), left + 8, top + 26, 0xFFD7C8A1);
+        drawString(fontRenderer, translate("gui.mmcenetworks.terminal.tab", getTabTitle()), left + 8, top + 38, 0xFFAFD5FF);
         drawString(fontRenderer, buildStatusLine(), left + 8, top + 50, 0xFF7FE0A7);
 
-        List<String> lines = collectVisibleLines();
+        drawString(fontRenderer, summaryLine, right - 8 - summaryWidth, top + 26, 0xFFCEC0A4);
+
+        List<DisplayLine> lines = collectVisibleLines();
         int lineTop = top + 66;
-        int maxLines = 10;
-        for (int i = 0; i < maxLines; i++) {
+        for (int i = 0; i < MAX_VISIBLE_LINES; i++) {
             int index = scrollOffset + i;
             if (index >= lines.size()) {
                 break;
             }
-            drawString(fontRenderer, lines.get(index), left + 8, lineTop + i * 11, 0xFFF3EEE4);
+            DisplayLine line = lines.get(index);
+            drawString(fontRenderer, line.text, left + 10, lineTop + i * 11, pickLineColor(line.kind));
         }
 
-        if (lines.size() > maxLines) {
+        drawScrollBar(left, top, right, bottom, lines.size());
+
+        if (lines.size() > MAX_VISIBLE_LINES) {
             drawString(
                 fontRenderer,
-                String.format(Locale.ROOT, "Scroll %d/%d", scrollOffset + 1, Math.max(1, lines.size() - maxLines + 1)),
+                translate("gui.mmcenetworks.terminal.scroll", scrollOffset + 1, Math.max(1, lines.size() - MAX_VISIBLE_LINES + 1)),
                 right - 76,
                 bottom - 12,
                 0xFF9D927E
@@ -131,28 +148,31 @@ public class GuiNetworkTerminal extends GuiScreen {
 
     private String buildStatusLine() {
         if (NetworkTerminalClientState.isLoading()) {
-            return "Status: syncing...";
+            return translate("gui.mmcenetworks.terminal.status.syncing");
         }
 
         long updated = NetworkTerminalClientState.getLastUpdatedAt();
         if (updated <= 0L) {
-            return "Status: no snapshot";
+            return translate("gui.mmcenetworks.terminal.status.empty");
         }
 
-        return "Updated: " + new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(updated));
+        return translate(
+            "gui.mmcenetworks.terminal.status.updated",
+            new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(updated))
+        );
     }
 
     private String getTabTitle() {
         if (selectedTab == TAB_RESOURCES) {
-            return "资源池";
+            return translate("gui.mmcenetworks.terminal.tab.resources");
         }
         if (selectedTab == TAB_TECH) {
-            return "科技树";
+            return translate("gui.mmcenetworks.terminal.tab.tech_tree");
         }
-        return "普通数值";
+        return translate("gui.mmcenetworks.terminal.tab.values_plain");
     }
 
-    private List<String> collectVisibleLines() {
+    private List<DisplayLine> collectVisibleLines() {
         NBTTagCompound sharedData = NetworkTerminalClientState.getSharedData();
         if (selectedTab == TAB_RESOURCES) {
             return collectResourceLines(sharedData);
@@ -163,79 +183,94 @@ public class GuiNetworkTerminal extends GuiScreen {
         return collectValueLines(sharedData);
     }
 
-    private List<String> collectValueLines(final NBTTagCompound sharedData) {
-        List<String> lines = new ArrayList<>();
+    private List<DisplayLine> collectValueLines(final NBTTagCompound sharedData) {
+        List<DisplayLine> lines = new ArrayList<>();
         List<String> keys = new ArrayList<>(sharedData.getKeySet());
         keys.remove("_resourcePools");
         keys.remove("_techTree");
         keys.sort(Comparator.naturalOrder());
 
         if (keys.isEmpty()) {
-            lines.add("No plain shared values.");
-            lines.add("Use Networks.setInt/setString/etc to populate data.");
+            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.values.empty")));
+            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.values.hint")));
             return lines;
         }
 
         for (String key : keys) {
             NBTBase tag = sharedData.getTag(key);
-            lines.add(key + " = " + (tag == null ? "<null>" : tag.toString()));
+            lines.add(line(LINE_SECTION, translate("gui.mmcenetworks.terminal.values.key", key)));
+            lines.add(line(LINE_VALUE, translate("gui.mmcenetworks.terminal.values.value", tag == null ? "<null>" : tag.toString())));
         }
         return lines;
     }
 
-    private List<String> collectResourceLines(final NBTTagCompound sharedData) {
-        List<String> lines = new ArrayList<>();
+    private List<DisplayLine> collectResourceLines(final NBTTagCompound sharedData) {
+        List<DisplayLine> lines = new ArrayList<>();
         NBTTagCompound pools = NetworkResourcePool.getAllPoolsSnapshot(sharedData);
         List<String> keys = new ArrayList<>(pools.getKeySet());
         keys.sort(Comparator.naturalOrder());
 
         if (keys.isEmpty()) {
-            lines.add("No resource pools.");
-            lines.add("Example: Networks.setSupply(controller, \"compute\", 5)");
+            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.resources.empty")));
+            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.resources.hint")));
             return lines;
         }
 
         for (String key : keys) {
             NBTTagCompound pool = pools.getCompoundTag(key);
-            lines.add(key + " cap=" + pool.getLong("capacity") + " used=" + pool.getLong("used") + " free=" + pool.getLong("available"));
+            lines.add(line(LINE_SECTION, translate("gui.mmcenetworks.terminal.resources.pool", key)));
+            lines.add(line(
+                LINE_STAT,
+                translate(
+                    "gui.mmcenetworks.terminal.resources.capacity",
+                    pool.getLong("capacity"),
+                    pool.getLong("used"),
+                    pool.getLong("available")
+                )
+            ));
 
             NBTTagCompound providers = pool.hasKey("providers", 10) ? pool.getCompoundTag("providers") : new NBTTagCompound();
             for (String source : sortedKeys(providers)) {
-                lines.add("  + " + trimSource(source) + " = " + providers.getLong(source));
+                lines.add(line(LINE_POSITIVE, translate("gui.mmcenetworks.terminal.resources.provider", trimSource(source), providers.getLong(source))));
             }
 
             NBTTagCompound consumers = pool.hasKey("consumers", 10) ? pool.getCompoundTag("consumers") : new NBTTagCompound();
             for (String source : sortedKeys(consumers)) {
-                lines.add("  - " + trimSource(source) + " = " + consumers.getLong(source));
+                lines.add(line(LINE_NEGATIVE, translate("gui.mmcenetworks.terminal.resources.consumer", trimSource(source), consumers.getLong(source))));
             }
         }
         return lines;
     }
 
-    private List<String> collectTechLines(final NBTTagCompound sharedData) {
-        List<String> lines = new ArrayList<>();
+    private List<DisplayLine> collectTechLines(final NBTTagCompound sharedData) {
+        List<DisplayLine> lines = new ArrayList<>();
         NBTTagCompound tree = NetworkTechTree.getTreeSnapshot(sharedData);
         List<String> techIds = new ArrayList<>(tree.getKeySet());
         techIds.sort(Comparator.naturalOrder());
 
         if (techIds.isEmpty()) {
-            lines.add("No tech definitions.");
-            lines.add("Example: Networks.defineTech(controller, \"techA\")");
+            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.tech.empty")));
+            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.tech.hint")));
             return lines;
         }
 
         for (String techId : techIds) {
             NBTTagCompound tech = tree.getCompoundTag(techId);
-            String state = tech.getBoolean("unlocked") ? "UNLOCKED" : "LOCKED";
-            String ready = tech.getBoolean("canUnlock") ? "ready" : "blocked";
-            lines.add(techId + " [" + state + ", " + ready + "]");
+            String state = tech.getBoolean("unlocked")
+                ? translate("gui.mmcenetworks.terminal.tech.state.unlocked")
+                : translate("gui.mmcenetworks.terminal.tech.state.locked");
+            String ready = tech.getBoolean("canUnlock")
+                ? translate("gui.mmcenetworks.terminal.tech.ready.ready")
+                : translate("gui.mmcenetworks.terminal.tech.ready.blocked");
+            lines.add(line(LINE_SECTION, translate("gui.mmcenetworks.terminal.tech.entry", techId)));
+            lines.add(line(LINE_STAT, translate("gui.mmcenetworks.terminal.tech.status", state, ready)));
 
             NBTTagCompound requires = tech.hasKey("requires", 10) ? tech.getCompoundTag("requires") : new NBTTagCompound();
             List<String> prerequisites = sortedKeys(requires);
             if (prerequisites.isEmpty()) {
-                lines.add("  requires: <none>");
+                lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.tech.requires.none")));
             } else {
-                lines.add("  requires: " + String.join(", ", prerequisites));
+                lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.tech.requires.list", String.join(", ", prerequisites))));
             }
         }
         return lines;
@@ -263,6 +298,83 @@ public class GuiNetworkTerminal extends GuiScreen {
             return value instanceof Integer ? (Integer) value : 0;
         } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
             return 0;
+        }
+    }
+
+    private String buildSummaryLine() {
+        NBTTagCompound sharedData = NetworkTerminalClientState.getSharedData();
+        if (selectedTab == TAB_VALUES) {
+            int count = Math.max(0, sharedData.getKeySet().size() - 2);
+            return translate("gui.mmcenetworks.terminal.summary.entries", count);
+        }
+        if (selectedTab == TAB_RESOURCES) {
+            int count = NetworkResourcePool.getAllPoolsSnapshot(sharedData).getKeySet().size();
+            return translate("gui.mmcenetworks.terminal.summary.pools", count);
+        }
+        int count = NetworkTechTree.getTreeSnapshot(sharedData).getKeySet().size();
+        return translate("gui.mmcenetworks.terminal.summary.techs", count);
+    }
+
+    private void drawScrollBar(final int left, final int top, final int right, final int bottom, final int totalLines) {
+        int trackLeft = right - 10;
+        int trackTop = top + 66;
+        int trackBottom = bottom - 22;
+        drawRect(trackLeft, trackTop, trackLeft + 4, trackBottom, 0x553B2D26);
+
+        if (totalLines <= MAX_VISIBLE_LINES) {
+            drawRect(trackLeft, trackTop, trackLeft + 4, trackBottom, 0xAA9C805A);
+            return;
+        }
+
+        int range = totalLines - MAX_VISIBLE_LINES;
+        int thumbHeight = Math.max(12, (trackBottom - trackTop) * MAX_VISIBLE_LINES / totalLines);
+        int freeSpace = (trackBottom - trackTop) - thumbHeight;
+        int thumbTop = trackTop + (range == 0 ? 0 : freeSpace * scrollOffset / range);
+        drawRect(trackLeft, thumbTop, trackLeft + 4, thumbTop + thumbHeight, 0xFFD4B27C);
+    }
+
+    private int pickLineColor(final int kind) {
+        if (kind == LINE_SECTION) {
+            return 0xFFF8D28A;
+        }
+        if (kind == LINE_STAT) {
+            return 0xFF9EE0FF;
+        }
+        if (kind == LINE_POSITIVE) {
+            return 0xFF85E89D;
+        }
+        if (kind == LINE_NEGATIVE) {
+            return 0xFFFFA98C;
+        }
+        if (kind == LINE_VALUE) {
+            return 0xFFF3EEE4;
+        }
+        return 0xFFBFB5A7;
+    }
+
+    private String translate(final String key, final Object... args) {
+        return I18n.format(key, args);
+    }
+
+    private String trimToWidth(final String text, final int maxWidth) {
+        if (fontRenderer.getStringWidth(text) <= maxWidth) {
+            return text;
+        }
+        String ellipsis = "...";
+        return fontRenderer.trimStringToWidth(text, Math.max(0, maxWidth - fontRenderer.getStringWidth(ellipsis))) + ellipsis;
+    }
+
+    private DisplayLine line(final int kind, final String text) {
+        return new DisplayLine(kind, text);
+    }
+
+    private static class DisplayLine {
+        private final int kind;
+        private final String text;
+
+        private DisplayLine(final int kind, final String text) {
+            this.kind = kind;
+            this.text = text;
         }
     }
 }

@@ -4,12 +4,16 @@ import com.mmce.networks.common.data.NetworkResourcePool;
 import com.mmce.networks.common.data.NetworkTechTree;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.handler.ControllerNetworkSyncHandler;
+import com.mmce.networks.common.config.MMCENetworksConfig;
+import com.mmce.networks.common.handler.TransientSupplyScheduler;
+import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.mmce.MmceReflection;
 import com.mmce.networks.common.util.WorldCompat;
 import crafttweaker.annotations.ZenRegister;
 import crafttweaker.api.data.IData;
 import crafttweaker.api.minecraft.CraftTweakerMC;
 import github.kasuminova.mmce.common.helper.IMachineController;
+import github.kasuminova.mmce.common.event.recipe.FactoryRecipeEvent;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagByte;
 import net.minecraft.nbt.NBTTagCompound;
@@ -77,9 +81,8 @@ public final class Networks {
             return false;
         }
 
-        NBTTagCompound sharedData = context.getSharedData();
         synchronized (context.getSavedData()) {
-            sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             if (!sharedData.hasKey(key)) {
                 return false;
             }
@@ -172,7 +175,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             int currentValue = sharedData.hasKey(key) ? CraftTweakerMC.getIData(sharedData.getTag(key)).asInt() : 0;
             if (currentValue < amount) {
                 return false;
@@ -191,7 +194,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return NetworkResourcePool.getTotalSupply(context.getSharedData(), key);
+            return NetworkResourcePool.getTotalSupply(context.getMutableSharedData(), key);
         }
     }
 
@@ -203,7 +206,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return NetworkResourcePool.getTotalUsage(context.getSharedData(), key);
+            return NetworkResourcePool.getTotalUsage(context.getMutableSharedData(), key);
         }
     }
 
@@ -215,7 +218,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return NetworkResourcePool.getAvailable(context.getSharedData(), key);
+            return NetworkResourcePool.getAvailable(context.getMutableSharedData(), key);
         }
     }
 
@@ -232,7 +235,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return NetworkResourcePool.getSupply(context.getSharedData(), key, context.scopeSource(source));
+            return NetworkResourcePool.getSupply(context.getMutableSharedData(), key, context.scopeSource(source));
         }
     }
 
@@ -249,7 +252,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return NetworkResourcePool.getUsage(context.getSharedData(), key, context.scopeSource(source));
+            return NetworkResourcePool.getUsage(context.getMutableSharedData(), key, context.scopeSource(source));
         }
     }
 
@@ -266,7 +269,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             long total = NetworkResourcePool.setSupply(sharedData, key, context.scopeSource(source), amount);
             context.apply(sharedData);
             return total;
@@ -284,6 +287,49 @@ public final class Networks {
     }
 
     @ZenMethod
+    public static long pulseSupply(final IMachineController controller, final String key, final int amount) {
+        return pulseSupply(controller, key, null, amount);
+    }
+
+    @ZenMethod
+    public static long pulseSupply(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return 0L;
+        }
+
+        long expiresAt = System.currentTimeMillis() + Math.max(1L, MMCENetworksConfig.transientSupplyGraceTicks) * 50L;
+        String scopedSource = context.scopeSource(source);
+        long total = TransientSupplyScheduler.pulse(
+            context.world,
+            WorldCompat.getDimension(context.world),
+            context.networkId,
+            key,
+            scopedSource,
+            amount,
+            expiresAt
+        );
+        TileEntity tile = asTile(controller);
+        if (tile != null) {
+            REFLECTION.markForUpdateSync(tile);
+        }
+        return total;
+    }
+
+    @ZenMethod
+    public static long pulseThreadSupply(final FactoryRecipeEvent event, final String key, final int amount) {
+        if (event == null || event.getFactoryRecipeThread() == null) {
+            return 0L;
+        }
+        String threadName = event.getFactoryRecipeThread().getThreadName();
+        String source = "thread:"
+            + Integer.toHexString(System.identityHashCode(event.getFactoryRecipeThread()))
+            + ":"
+            + (threadName == null ? "unnamed" : threadName);
+        return pulseSupply(event.getController(), key, source, amount);
+    }
+
+    @ZenMethod
     public static boolean trySetUsage(final IMachineController controller, final String key, final int amount) {
         return trySetUsage(controller, key, null, amount);
     }
@@ -296,7 +342,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             boolean updated = NetworkResourcePool.trySetUsage(sharedData, key, context.scopeSource(source), amount);
             return updated && context.apply(sharedData);
         }
@@ -315,7 +361,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             boolean updated = NetworkResourcePool.tryAddUsage(sharedData, key, context.scopeSource(source), amount);
             return updated && context.apply(sharedData);
         }
@@ -334,7 +380,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             long remaining = NetworkResourcePool.releaseUsage(sharedData, key, context.scopeSource(source), amount);
             context.apply(sharedData);
             return remaining;
@@ -367,7 +413,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return CraftTweakerMC.getIDataModifyable(NetworkResourcePool.getAllPoolsSnapshot(context.getSharedData()));
+            return CraftTweakerMC.getIDataModifyable(NetworkResourcePool.getAllPoolsSnapshot(context.getMutableSharedData()));
         }
     }
 
@@ -379,7 +425,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound snapshot = NetworkResourcePool.getPoolSnapshot(context.getSharedData(), key);
+            NBTTagCompound snapshot = NetworkResourcePool.getPoolSnapshot(context.getMutableSharedData(), key);
             return CraftTweakerMC.getIDataModifyable(snapshot == null ? new NBTTagCompound() : snapshot);
         }
     }
@@ -412,7 +458,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return NetworkTechTree.hasDefinition(context.getSharedData(), techId);
+            return NetworkTechTree.hasDefinition(context.getMutableSharedData(), techId);
         }
     }
 
@@ -424,7 +470,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return NetworkTechTree.isUnlocked(context.getSharedData(), techId);
+            return NetworkTechTree.isUnlocked(context.getMutableSharedData(), techId);
         }
     }
 
@@ -436,7 +482,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return NetworkTechTree.canUnlock(context.getSharedData(), techId);
+            return NetworkTechTree.canUnlock(context.getMutableSharedData(), techId);
         }
     }
 
@@ -458,7 +504,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            return CraftTweakerMC.getIDataModifyable(NetworkTechTree.getTreeSnapshot(context.getSharedData()));
+            return CraftTweakerMC.getIDataModifyable(NetworkTechTree.getTreeSnapshot(context.getMutableSharedData()));
         }
     }
 
@@ -470,7 +516,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound snapshot = NetworkTechTree.getTechSnapshot(context.getSharedData(), techId);
+            NBTTagCompound snapshot = NetworkTechTree.getTechSnapshot(context.getMutableSharedData(), techId);
             return CraftTweakerMC.getIDataModifyable(snapshot == null ? new NBTTagCompound() : snapshot);
         }
     }
@@ -487,7 +533,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             sharedData.setTag(key, value.copy());
             return context.apply(sharedData);
         }
@@ -500,7 +546,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             double currentValue = sharedData.hasKey(key) ? readNumeric(sharedData.getTag(key)) : 0.0D;
             double nextValue = overwrite ? delta : currentValue + delta;
             writeNumeric(sharedData, key, nextValue, type);
@@ -516,7 +562,7 @@ public final class Networks {
         }
 
         synchronized (context.getSavedData()) {
-            NBTTagCompound sharedData = context.getSharedData();
+            NBTTagCompound sharedData = context.getMutableSharedData();
             boolean changed = mutation.apply(sharedData);
             return changed && context.apply(sharedData);
         }
@@ -529,7 +575,7 @@ public final class Networks {
         NBTTagCompound sharedData;
         if (context != null) {
             synchronized (context.getSavedData()) {
-                sharedData = context.getSharedData();
+                sharedData = context.getMutableSharedData();
             }
         } else if (tile != null) {
             sharedData = REFLECTION.getSharedData(tile);
@@ -610,7 +656,7 @@ public final class Networks {
 
             synchronized (context.getSavedData()) {
                 String[] statements = expression.split(";");
-                NBTTagCompound sharedData = context.getSharedData();
+                NBTTagCompound sharedData = context.getMutableSharedData();
                 for (String rawStatement : statements) {
                     String statement = rawStatement.trim();
                     if (statement.isEmpty()) {
@@ -832,7 +878,11 @@ public final class Networks {
         }
 
         private NBTTagCompound getSharedData() {
-            return getSavedData().getNetworkData(WorldCompat.getDimension(world), networkId);
+            return MMCENetworkApi.getSharedData(world, networkId);
+        }
+
+        private NBTTagCompound getMutableSharedData() {
+            return getSavedData().getNetworkDataMutable(WorldCompat.getDimension(world), networkId);
         }
 
         private MMCENetworkSavedData getSavedData() {
@@ -840,7 +890,7 @@ public final class Networks {
         }
 
         private boolean apply(final NBTTagCompound sharedData) {
-            getSavedData().putNetworkData(WorldCompat.getDimension(world), networkId, sharedData);
+            getSavedData().markDirty();
             if (!REFLECTION.setSharedData(tile, networkId, sharedData)) {
                 return false;
             }

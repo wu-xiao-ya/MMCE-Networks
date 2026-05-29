@@ -4,6 +4,7 @@ import com.mmce.networks.common.data.NetworkResourcePool;
 import com.mmce.networks.common.data.NetworkTechTree;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.handler.ControllerNetworkSyncHandler;
+import com.mmce.networks.common.handler.TransientSupplyScheduler;
 import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagCompound;
@@ -14,7 +15,10 @@ public final class MMCENetworkApi {
     }
 
     public static NBTTagCompound getSharedData(final World world, final String networkId) {
-        return MMCENetworkSavedData.get(world).getNetworkData(WorldCompat.getDimension(world), networkId);
+        int dimension = WorldCompat.getDimension(world);
+        NBTTagCompound sharedData = MMCENetworkSavedData.get(world).getNetworkData(dimension, networkId);
+        TransientSupplyScheduler.applyTransientSupplies(sharedData, dimension, networkId);
+        return sharedData;
     }
 
     public static void setSharedData(final World world, final String networkId, final NBTTagCompound sharedData) {
@@ -150,9 +154,9 @@ public final class MMCENetworkApi {
         MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
         int dimension = WorldCompat.getDimension(world);
         synchronized (savedData) {
-            NBTTagCompound data = savedData.getNetworkData(dimension, networkId);
+            NBTTagCompound data = savedData.getNetworkDataMutable(dimension, networkId);
             T result = operation.run(data);
-            savedData.putNetworkData(dimension, networkId, data);
+            savedData.markDirty();
             ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
             return result;
         }

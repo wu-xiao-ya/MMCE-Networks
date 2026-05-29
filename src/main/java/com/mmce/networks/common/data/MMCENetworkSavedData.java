@@ -8,10 +8,13 @@ import net.minecraft.world.storage.MapStorage;
 import net.minecraft.world.storage.WorldSavedData;
 import net.minecraftforge.common.util.Constants;
 
-import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -20,6 +23,8 @@ public class MMCENetworkSavedData extends WorldSavedData {
 
     private final Map<NetworkKey, NBTTagCompound> networks = new HashMap<>();
     private final Map<ControllerKey, ControllerSnapshot> controllerSnapshots = new HashMap<>();
+    private final Map<Integer, Set<Long>> controllersByDimension = new HashMap<>();
+    private final Map<NetworkKey, Set<Long>> controllersByNetwork = new HashMap<>();
 
     public MMCENetworkSavedData() {
         super(DATA_NAME);
@@ -94,6 +99,19 @@ public class MMCENetworkSavedData extends WorldSavedData {
         return data == null ? new NBTTagCompound() : data.copy();
     }
 
+    public NBTTagCompound getNetworkDataMutable(final int dimension, final String networkId) {
+        NetworkKey key = new NetworkKey(dimension, networkId);
+        NBTTagCompound data = networks.get(key);
+        if (data != null) {
+            return data;
+        }
+
+        data = new NBTTagCompound();
+        networks.put(key, data);
+        markDirty();
+        return data;
+    }
+
     public boolean hasNetwork(final int dimension, final String networkId) {
         return networks.containsKey(new NetworkKey(dimension, networkId));
     }
@@ -115,6 +133,16 @@ public class MMCENetworkSavedData extends WorldSavedData {
         }
     }
 
+    public List<NetworkRef> getNetworkKeys(final int dimension) {
+        List<NetworkRef> refs = new ArrayList<>();
+        for (NetworkKey key : networks.keySet()) {
+            if (key.dimension == dimension) {
+                refs.add(new NetworkRef(key.dimension, key.networkId));
+            }
+        }
+        return refs;
+    }
+
     public ControllerSnapshot getControllerSnapshot(final int dimension, final long pos) {
         ControllerSnapshot snapshot = controllerSnapshots.get(new ControllerKey(dimension, pos));
         return snapshot == null ? null : snapshot.copy();
@@ -128,32 +156,38 @@ public class MMCENetworkSavedData extends WorldSavedData {
             return;
         }
 
+        if (current != null) {
+            removeControllerIndex(dimension, pos, current.networkId);
+        }
         controllerSnapshots.put(key, snapshot);
+        addControllerIndex(dimension, pos, networkId);
         markDirty();
     }
 
     public void removeControllerSnapshot(final int dimension, final long pos) {
-        if (controllerSnapshots.remove(new ControllerKey(dimension, pos)) != null) {
+        ControllerSnapshot removed = controllerSnapshots.remove(new ControllerKey(dimension, pos));
+        if (removed != null) {
+            removeControllerIndex(dimension, pos, removed.networkId);
             markDirty();
         }
     }
 
     public List<Long> getControllerPositions(final int dimension, final String networkId) {
-        List<Long> positions = new ArrayList<>();
-        for (Map.Entry<ControllerKey, ControllerSnapshot> entry : controllerSnapshots.entrySet()) {
-            ControllerKey key = entry.getKey();
-            ControllerSnapshot snapshot = entry.getValue();
-            if (key.dimension == dimension && snapshot.networkId.equals(networkId)) {
-                positions.add(key.pos);
-            }
-        }
-        return positions;
+        Set<Long> positions = controllersByNetwork.get(new NetworkKey(dimension, networkId));
+        return positions == null ? Collections.emptyList() : new ArrayList<>(positions);
+    }
+
+    public List<Long> getAllControllerPositions(final int dimension) {
+        Set<Long> positions = controllersByDimension.get(dimension);
+        return positions == null ? Collections.emptyList() : new ArrayList<>(positions);
     }
 
     @Override
     public void readFromNBT(final NBTTagCompound nbt) {
         networks.clear();
         controllerSnapshots.clear();
+        controllersByDimension.clear();
+        controllersByNetwork.clear();
 
         NBTTagList networkList = nbt.getTagList("networks", Constants.NBT.TAG_COMPOUND);
         for (int i = 0; i < networkList.tagCount(); i++) {
@@ -175,10 +209,14 @@ public class MMCENetworkSavedData extends WorldSavedData {
                 continue;
             }
 
+            int dimension = entry.getInteger("dimension");
+            long pos = entry.getLong("pos");
+            String networkId = entry.getString("networkId");
             controllerSnapshots.put(
-                new ControllerKey(entry.getInteger("dimension"), entry.getLong("pos")),
-                new ControllerSnapshot(entry.getString("networkId"), entry.getCompoundTag("data"))
+                new ControllerKey(dimension, pos),
+                new ControllerSnapshot(networkId, entry.getCompoundTag("data"))
             );
+            addControllerIndex(dimension, pos, networkId);
         }
     }
 
@@ -206,6 +244,30 @@ public class MMCENetworkSavedData extends WorldSavedData {
         compound.setTag("controllerSnapshots", snapshotList);
 
         return compound;
+    }
+
+    private void addControllerIndex(final int dimension, final long pos, final String networkId) {
+        controllersByDimension.computeIfAbsent(dimension, ignored -> new HashSet<>()).add(pos);
+        controllersByNetwork.computeIfAbsent(new NetworkKey(dimension, networkId), ignored -> new HashSet<>()).add(pos);
+    }
+
+    private void removeControllerIndex(final int dimension, final long pos, final String networkId) {
+        Set<Long> dimensionSet = controllersByDimension.get(dimension);
+        if (dimensionSet != null) {
+            dimensionSet.remove(pos);
+            if (dimensionSet.isEmpty()) {
+                controllersByDimension.remove(dimension);
+            }
+        }
+
+        NetworkKey networkKey = new NetworkKey(dimension, networkId);
+        Set<Long> networkSet = controllersByNetwork.get(networkKey);
+        if (networkSet != null) {
+            networkSet.remove(pos);
+            if (networkSet.isEmpty()) {
+                controllersByNetwork.remove(networkKey);
+            }
+        }
     }
 
     public static final class ControllerSnapshot {
@@ -246,6 +308,24 @@ public class MMCENetworkSavedData extends WorldSavedData {
             int result = networkId.hashCode();
             result = 31 * result + sharedData.hashCode();
             return result;
+        }
+    }
+
+    public static final class NetworkRef {
+        private final int dimension;
+        private final String networkId;
+
+        public NetworkRef(final int dimension, final String networkId) {
+            this.dimension = dimension;
+            this.networkId = networkId;
+        }
+
+        public int getDimension() {
+            return dimension;
+        }
+
+        public String getNetworkId() {
+            return networkId;
         }
     }
 
