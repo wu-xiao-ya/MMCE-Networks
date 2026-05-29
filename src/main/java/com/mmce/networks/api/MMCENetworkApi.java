@@ -22,7 +22,8 @@ public final class MMCENetworkApi {
     }
 
     public static void setSharedData(final World world, final String networkId, final NBTTagCompound sharedData) {
-        MMCENetworkSavedData.get(world).putNetworkData(WorldCompat.getDimension(world), networkId, sharedData);
+        int dimension = WorldCompat.getDimension(world);
+        MMCENetworkSavedData.get(world).putNetworkData(dimension, networkId, sharedData);
         ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
     }
 
@@ -42,15 +43,27 @@ public final class MMCENetworkApi {
     }
 
     public static long getResourceCapacity(final World world, final String networkId, final String key) {
-        return withSharedData(world, networkId, data -> NetworkResourcePool.getTotalSupply(data, key));
+        MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
+        int dimension = WorldCompat.getDimension(world);
+        synchronized (savedData) {
+            return savedData.getResourcePoolTotals(dimension, networkId, key).getTotalSupply();
+        }
     }
 
     public static long getResourceUsage(final World world, final String networkId, final String key) {
-        return withSharedData(world, networkId, data -> NetworkResourcePool.getTotalUsage(data, key));
+        MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
+        int dimension = WorldCompat.getDimension(world);
+        synchronized (savedData) {
+            return savedData.getResourcePoolTotals(dimension, networkId, key).getUsed();
+        }
     }
 
     public static long getResourceAvailable(final World world, final String networkId, final String key) {
-        return withSharedData(world, networkId, data -> NetworkResourcePool.getAvailable(data, key));
+        MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
+        int dimension = WorldCompat.getDimension(world);
+        synchronized (savedData) {
+            return savedData.getResourcePoolTotals(dimension, networkId, key).getAvailable();
+        }
     }
 
     public static long getResourceSupply(final World world, final String networkId, final String key, final String source) {
@@ -156,6 +169,7 @@ public final class MMCENetworkApi {
         synchronized (savedData) {
             NBTTagCompound data = savedData.getNetworkDataMutable(dimension, networkId);
             T result = operation.run(data);
+            savedData.invalidateAllResourcePoolTotals(dimension, networkId);
             savedData.markDirty();
             ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
             return result;

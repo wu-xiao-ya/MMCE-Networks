@@ -3,12 +3,18 @@ package com.mmce.networks.client.gui;
 import com.mmce.networks.client.util.ClientCompat;
 import com.mmce.networks.common.data.NetworkResourcePool;
 import com.mmce.networks.common.data.NetworkTechTree;
+import com.mmce.networks.common.data.NetworkValueDisplayRegistry.ValueDisplaySpec;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.nbt.NBTBase;
+import net.minecraft.nbt.NBTTagByte;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagDouble;
+import net.minecraft.nbt.NBTTagInt;
+import net.minecraft.nbt.NBTTagLong;
+import net.minecraft.nbt.NBTTagString;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -185,6 +191,11 @@ public class GuiNetworkTerminal extends GuiScreen {
 
     private List<DisplayLine> collectValueLines(final NBTTagCompound sharedData) {
         List<DisplayLine> lines = new ArrayList<>();
+        List<ValueDisplaySpec> specs = NetworkTerminalClientState.getValueDisplaySpecs();
+        if (!specs.isEmpty()) {
+            return collectConfiguredValueLines(sharedData, specs);
+        }
+
         List<String> keys = new ArrayList<>(sharedData.getKeySet());
         keys.remove("_resourcePools");
         keys.remove("_techTree");
@@ -199,7 +210,31 @@ public class GuiNetworkTerminal extends GuiScreen {
         for (String key : keys) {
             NBTBase tag = sharedData.getTag(key);
             lines.add(line(LINE_SECTION, translate("gui.mmcenetworks.terminal.values.key", key)));
-            lines.add(line(LINE_VALUE, translate("gui.mmcenetworks.terminal.values.value", tag == null ? "<null>" : tag.toString())));
+            lines.add(line(LINE_VALUE, translate("gui.mmcenetworks.terminal.values.value", formatTagValue(tag))));
+        }
+        return lines;
+    }
+
+    private List<DisplayLine> collectConfiguredValueLines(final NBTTagCompound sharedData, final List<ValueDisplaySpec> specs) {
+        List<DisplayLine> lines = new ArrayList<>();
+        for (ValueDisplaySpec spec : specs) {
+            if (!sharedData.hasKey(spec.getKey())) {
+                continue;
+            }
+
+            NBTBase tag = sharedData.getTag(spec.getKey());
+            String rawValue = formatTagValue(tag);
+            String text = spec.getTemplate()
+                .replace("{name}", spec.getDisplayName())
+                .replace("{key}", spec.getKey())
+                .replace("{value}", rawValue);
+            lines.add(line(LINE_SECTION, spec.getDisplayName()));
+            lines.add(line(LINE_VALUE, text));
+        }
+
+        if (lines.isEmpty()) {
+            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.values.empty")));
+            lines.add(line(LINE_HINT, translate("gui.mmcenetworks.terminal.values.config_hint")));
         }
         return lines;
     }
@@ -350,6 +385,36 @@ public class GuiNetworkTerminal extends GuiScreen {
             return 0xFFF3EEE4;
         }
         return 0xFFBFB5A7;
+    }
+
+    private String formatTagValue(final NBTBase tag) {
+        if (tag == null) {
+            return "<null>";
+        }
+        if (tag instanceof NBTTagString) {
+            return ((NBTTagString) tag).getString();
+        }
+        if (tag instanceof NBTTagInt) {
+            return Integer.toString(((NBTTagInt) tag).getInt());
+        }
+        if (tag instanceof NBTTagLong) {
+            return Long.toString(((NBTTagLong) tag).getLong());
+        }
+        if (tag instanceof NBTTagDouble) {
+            double value = ((NBTTagDouble) tag).getDouble();
+            if (value == (long) value) {
+                return Long.toString((long) value);
+            }
+            return Double.toString(value);
+        }
+        if (tag instanceof NBTTagByte) {
+            byte value = ((NBTTagByte) tag).getByte();
+            if (value == 0 || value == 1) {
+                return value == 1 ? translate("gui.mmcenetworks.terminal.value.true") : translate("gui.mmcenetworks.terminal.value.false");
+            }
+            return Byte.toString(value);
+        }
+        return tag.toString();
     }
 
     private String translate(final String key, final Object... args) {

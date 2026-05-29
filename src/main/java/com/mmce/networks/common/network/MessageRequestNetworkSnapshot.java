@@ -1,6 +1,7 @@
 package com.mmce.networks.common.network;
 
 import com.mmce.networks.api.MMCENetworkApi;
+import com.mmce.networks.common.data.NetworkValueDisplayRegistry;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.nbt.NBTTagCompound;
@@ -41,7 +42,10 @@ public class MessageRequestNetworkSnapshot implements IMessage {
             NBTTagCompound sharedData = networkId == null || networkId.isEmpty()
                 ? new NBTTagCompound()
                 : MMCENetworkApi.getSharedData(player.getServerWorld(), networkId);
-            NetworkHandler.CHANNEL.sendTo(new MessageSyncNetworkSnapshot(networkId, sharedData), player);
+            NetworkHandler.CHANNEL.sendTo(
+                new MessageSyncNetworkSnapshot(networkId, sharedData, NetworkValueDisplayRegistry.toNbt()),
+                player
+            );
         }
     }
 }

@@ -8,6 +8,7 @@ import net.minecraft.world.storage.MapStorage;
 import net.minecraft.world.storage.WorldSavedData;
 import net.minecraftforge.common.util.Constants;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -22,6 +23,7 @@ public class MMCENetworkSavedData extends WorldSavedData {
     private static final String DATA_NAME = "mmcenetworks_data";
 
     private final Map<NetworkKey, NBTTagCompound> networks = new HashMap<>();
+    private final Map<NetworkPoolKey, NetworkResourcePool.ResourcePoolTotals> resourcePoolTotalsCache = new HashMap<>();
     private final Map<ControllerKey, ControllerSnapshot> controllerSnapshots = new HashMap<>();
     private final Map<Integer, Set<Long>> controllersByDimension = new HashMap<>();
     private final Map<NetworkKey, Set<Long>> controllersByNetwork = new HashMap<>();
@@ -112,8 +114,37 @@ public class MMCENetworkSavedData extends WorldSavedData {
         return data;
     }
 
+    @Nullable
+    public NBTTagCompound getExistingNetworkDataMutable(final int dimension, final String networkId) {
+        return networks.get(new NetworkKey(dimension, networkId));
+    }
+
     public boolean hasNetwork(final int dimension, final String networkId) {
         return networks.containsKey(new NetworkKey(dimension, networkId));
+    }
+
+    public NetworkResourcePool.ResourcePoolTotals getResourcePoolTotals(final int dimension, final String networkId, final String poolKey) {
+        NetworkPoolKey key = new NetworkPoolKey(dimension, networkId, poolKey);
+        NetworkResourcePool.ResourcePoolTotals cached = resourcePoolTotalsCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+
+        NetworkResourcePool.ResourcePoolTotals computed = NetworkResourcePool.getTotals(
+            getExistingNetworkDataMutable(dimension, networkId),
+            poolKey
+        );
+        resourcePoolTotalsCache.put(key, computed);
+        return computed;
+    }
+
+    public void invalidateResourcePoolTotals(final int dimension, final String networkId, final String poolKey) {
+        resourcePoolTotalsCache.remove(new NetworkPoolKey(dimension, networkId, poolKey));
+    }
+
+    public void invalidateAllResourcePoolTotals(final int dimension, final String networkId) {
+        NetworkKey key = new NetworkKey(dimension, networkId);
+        resourcePoolTotalsCache.keySet().removeIf(poolKey -> poolKey.matches(key));
     }
 
     public void putNetworkData(final int dimension, final String networkId, final NBTTagCompound data) {
@@ -124,11 +155,13 @@ public class MMCENetworkSavedData extends WorldSavedData {
         }
 
         networks.put(key, data.copy());
+        invalidateAllResourcePoolTotals(dimension, networkId);
         markDirty();
     }
 
     public void removeNetwork(final int dimension, final String networkId) {
         if (networks.remove(new NetworkKey(dimension, networkId)) != null) {
+            invalidateAllResourcePoolTotals(dimension, networkId);
             markDirty();
         }
     }
@@ -185,6 +218,7 @@ public class MMCENetworkSavedData extends WorldSavedData {
     @Override
     public void readFromNBT(final NBTTagCompound nbt) {
         networks.clear();
+        resourcePoolTotalsCache.clear();
         controllerSnapshots.clear();
         controllersByDimension.clear();
         controllersByNetwork.clear();
@@ -383,6 +417,44 @@ public class MMCENetworkSavedData extends WorldSavedData {
         public int hashCode() {
             int result = dimension;
             result = 31 * result + (int) (pos ^ (pos >>> 32));
+            return result;
+        }
+    }
+
+    private static final class NetworkPoolKey {
+        private final int dimension;
+        private final String networkId;
+        private final String poolKey;
+
+        private NetworkPoolKey(final int dimension, final String networkId, final String poolKey) {
+            this.dimension = dimension;
+            this.networkId = networkId;
+            this.poolKey = poolKey;
+        }
+
+        private boolean matches(final NetworkKey key) {
+            return dimension == key.dimension && networkId.equals(key.networkId);
+        }
+
+        @Override
+        public boolean equals(final Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof NetworkPoolKey)) {
+                return false;
+            }
+            NetworkPoolKey other = (NetworkPoolKey) obj;
+            return dimension == other.dimension
+                && networkId.equals(other.networkId)
+                && poolKey.equals(other.poolKey);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = dimension;
+            result = 31 * result + networkId.hashCode();
+            result = 31 * result + poolKey.hashCode();
             return result;
         }
     }

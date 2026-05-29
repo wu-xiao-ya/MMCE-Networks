@@ -17,17 +17,23 @@ public final class NetworkResourcePool {
     private NetworkResourcePool() {
     }
 
+    public static ResourcePoolTotals getTotals(final NBTTagCompound sharedData, final String key) {
+        long supply = sumEntries(getEntries(sharedData, key, PROVIDERS_TAG, false));
+        long transientSupply = sumTransientEntries(getTransientEntries(sharedData, key, false));
+        long used = sumEntries(getEntries(sharedData, key, CONSUMERS_TAG, false));
+        return new ResourcePoolTotals(supply, transientSupply, used);
+    }
+
     public static long getTotalSupply(final NBTTagCompound sharedData, final String key) {
-        return sumEntries(getEntries(sharedData, key, PROVIDERS_TAG, false))
-            + sumTransientEntries(getTransientEntries(sharedData, key, false));
+        return getTotals(sharedData, key).getTotalSupply();
     }
 
     public static long getTotalUsage(final NBTTagCompound sharedData, final String key) {
-        return sumEntries(getEntries(sharedData, key, CONSUMERS_TAG, false));
+        return getTotals(sharedData, key).getUsed();
     }
 
     public static long getAvailable(final NBTTagCompound sharedData, final String key) {
-        return Math.max(0L, getTotalSupply(sharedData, key) - getTotalUsage(sharedData, key));
+        return getTotals(sharedData, key).getAvailable();
     }
 
     public static long getSupply(final NBTTagCompound sharedData, final String key, final String source) {
@@ -314,5 +320,37 @@ public final class NetworkResourcePool {
 
     private static boolean isNullOrEmpty(@Nullable final String value) {
         return value == null || value.isEmpty();
+    }
+
+    public static final class ResourcePoolTotals {
+        private final long persistentSupply;
+        private final long transientSupply;
+        private final long used;
+
+        public ResourcePoolTotals(final long persistentSupply, final long transientSupply, final long used) {
+            this.persistentSupply = persistentSupply;
+            this.transientSupply = transientSupply;
+            this.used = used;
+        }
+
+        public long getPersistentSupply() {
+            return persistentSupply;
+        }
+
+        public long getTransientSupply() {
+            return transientSupply;
+        }
+
+        public long getUsed() {
+            return used;
+        }
+
+        public long getTotalSupply() {
+            return persistentSupply + transientSupply;
+        }
+
+        public long getAvailable() {
+            return Math.max(0L, getTotalSupply() - used);
+        }
     }
 }

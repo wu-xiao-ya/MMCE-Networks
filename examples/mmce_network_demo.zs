@@ -4,7 +4,7 @@ import mods.modularmachinery.RecipeBuilder;
 import mods.modularmachinery.RecipeCheckEvent;
 import mods.modularmachinery.RecipeFinishEvent;
 import mods.modularmachinery.MMEvents;
-import mods.modularmachinery.MachineTickEvent;
+import mods.modularmachinery.FactoryRecipeTickEvent;
 
 // 把这两个名字改成你自己的机器注册名。
 val machineA = "machine_a";
@@ -62,47 +62,10 @@ RecipeBuilder.newBuilder("network_demo_consume_a", machineB, 20)
     })
     .build();
 
-// 机器 B 每 tick 占用网络侧数据；
-// 如需状态栏显示，请按你当前 MMCE 脚本桥实际暴露的方法单独补。
-MMEvents.onMachinePostTick(machineB, function(event as MachineTickEvent) {
-    if (!Networks.hasNetwork(event.controller)) {
-        return;
-    }
-
-    Networks.defineTech(event.controller, techA);
-    Networks.defineTech(event.controller, techB);
-    Networks.addTechPrerequisite(event.controller, techB, techA);
-    if (Networks.getBoolean(event.controller, techAFlag, false)) {
-        Networks.unlockTech(event.controller, techA);
-    }
-    if (Networks.getBoolean(event.controller, techBFlag, false)) {
-        Networks.unlockTech(event.controller, techB);
-    }
-    Networks.setString(event.controller, "demoStatusA", "A=" ~ Networks.getInt(event.controller, keyA, 0));
-});
-
-// 网络资源池示例：
-// machineA 运行时给网络提供 5 点算力上限。
-MMEvents.onMachinePostTick(machineA, function(event as MachineTickEvent) {
-    if (!Networks.hasNetwork(event.controller)) {
-        return;
-    }
-
-    Networks.defineTech(event.controller, techA);
-    Networks.defineTech(event.controller, techB);
-    Networks.addTechPrerequisite(event.controller, techB, techA);
-    if (Networks.getBoolean(event.controller, techAFlag, false)) {
-        Networks.unlockTech(event.controller, techA);
-    }
-    if (Networks.getBoolean(event.controller, techBFlag, false)) {
-        Networks.unlockTech(event.controller, techB);
-    }
-    Networks.setSupply(event.controller, computeKey, 5);
-});
-
 // machineB 的配方需要持续占用 3 点算力。
 // 检查阶段只看当前可用量是否够。
 RecipeBuilder.newBuilder("network_demo_use_compute", machineB, 20)
+    .addItemInput(<minecraft:coal> * 1)
     .addCheckHandler(function(event as RecipeCheckEvent) {
         if (!requireNetwork(event)) {
             return;
@@ -111,25 +74,20 @@ RecipeBuilder.newBuilder("network_demo_use_compute", machineB, 20)
             event.setFailed("need compute >= 3");
         }
     })
+    .addFactoryPreTickHandler(function(event as FactoryRecipeTickEvent) {
+        Networks.setSupply(event.controller, computeKey, 5);
+        if (!Networks.trySetUsage(event.controller, computeKey, 3)) {
+            Networks.setString(event.controller, "demoComputeStatus", "busy");
+            return;
+        }
+        val capacity = Networks.getCapacity(event.controller, computeKey);
+        val used = Networks.getUsed(event.controller, computeKey);
+        Networks.setString(event.controller, "demoComputeStatus", used ~ "/" ~ capacity);
+    })
     .addFinishHandler(function(event as RecipeFinishEvent) {
         Networks.clearUsage(event.controller, computeKey);
     })
     .build();
-
-MMEvents.onMachinePostTick(machineB, function(event as MachineTickEvent) {
-    if (!Networks.hasNetwork(event.controller)) {
-        return;
-    }
-
-    if (!Networks.trySetUsage(event.controller, computeKey, 3)) {
-        Networks.setString(event.controller, "demoComputeStatus", "busy");
-        return;
-    }
-
-    val capacity = Networks.getCapacity(event.controller, computeKey);
-    val used = Networks.getUsed(event.controller, computeKey);
-    Networks.setString(event.controller, "demoComputeStatus", used ~ "/" ~ capacity);
-});
 
 // 科技树示例：
 // machineA 完成配方后解锁 techA，machineB 再能解锁或使用依赖 techA 的内容。

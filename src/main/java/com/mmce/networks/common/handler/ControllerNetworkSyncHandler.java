@@ -15,7 +15,9 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class ControllerNetworkSyncHandler {
@@ -40,6 +42,7 @@ public class ControllerNetworkSyncHandler {
         }
 
         int dimension = WorldCompat.getDimension(event.world);
+        TransientSupplyScheduler.process(event.world, dimension);
         Set<String> dirtyNetworkIds = consumeDirtyNetworks(dimension);
         boolean fixedSync = shouldRunFixedSync(event.world);
         if (dirtyNetworkIds.isEmpty() && !fixedSync) {
@@ -47,12 +50,12 @@ public class ControllerNetworkSyncHandler {
         }
 
         MMCENetworkSavedData data = MMCENetworkSavedData.get(event.world);
-        TransientSupplyScheduler.process(event.world, dimension);
+        Map<String, NBTTagCompound> networkSharedDataCache = new HashMap<>();
         List<Long> positions = fixedSync
             ? data.getAllControllerPositions(dimension)
             : getDirtyControllerPositions(data, dimension, dirtyNetworkIds);
         for (Long pos : positions) {
-            syncController(data, dimension, event.world, pos.longValue());
+            syncController(data, dimension, event.world, pos.longValue(), networkSharedDataCache);
         }
     }
 
@@ -73,7 +76,13 @@ public class ControllerNetworkSyncHandler {
         );
     }
 
-    private void syncController(final MMCENetworkSavedData data, final int dimension, final World world, final long posLong) {
+    private void syncController(
+        final MMCENetworkSavedData data,
+        final int dimension,
+        final World world,
+        final long posLong,
+        final Map<String, NBTTagCompound> networkSharedDataCache
+    ) {
         TileEntity tile = WorldCompat.getTileEntity(world, BlockPos.fromLong(posLong));
         if (!reflection.isControllerTile(tile)) {
             data.removeControllerSnapshot(dimension, posLong);
@@ -87,12 +96,12 @@ public class ControllerNetworkSyncHandler {
         }
 
         NBTTagCompound controllerSharedData = reflection.getSharedData(tile);
-        NBTTagCompound networkSharedData;
-        synchronized (data) {
-            networkSharedData = MMCENetworkApi.getSharedData(world, networkId);
-            if (!data.hasNetwork(dimension, networkId)) {
-                data.putNetworkData(dimension, networkId, data.getNetworkData(dimension, networkId));
+        NBTTagCompound networkSharedData = networkSharedDataCache.get(networkId);
+        if (networkSharedData == null) {
+            synchronized (data) {
+                networkSharedData = MMCENetworkApi.getSharedData(world, networkId);
             }
+            networkSharedDataCache.put(networkId, networkSharedData);
         }
 
         // The network store is the single source of truth. Never write controller-local
