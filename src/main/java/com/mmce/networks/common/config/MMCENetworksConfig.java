@@ -6,17 +6,26 @@ import java.io.File;
 
 public final class MMCENetworksConfig {
     private static final String CATEGORY_GENERAL = "general";
+    private static final String CATEGORY_CLIENT = "client";
+    private static final long HOT_RELOAD_CHECK_INTERVAL_MS = 5000L;
 
     public static int fallbackSyncIntervalTicks = 20;
     public static int transientSupplyGraceTicks = 40;
     public static int dirtyNetworkSyncIntervalTicks = 2;
     public static boolean enableSyncProfiling = false;
     public static int profilingLogIntervalTicks = 200;
+    public static double terminalTextScale = 0.65D;
+
+    private static File configFile;
+    private static long lastLoadedTimestamp = -1L;
+    private static long lastReloadCheckAt;
 
     private MMCENetworksConfig() {
     }
 
     public static void load(final File file) {
+        configFile = file;
+        lastLoadedTimestamp = file == null || !file.exists() ? -1L : file.lastModified();
         Configuration config = new Configuration(file);
         try {
             config.load();
@@ -58,10 +67,36 @@ public final class MMCENetworksConfig {
                 20 * 300,
                 "How often to emit profiling logs, in ticks, when sync profiling is enabled."
             );
+            terminalTextScale = config.getFloat(
+                "terminalTextScale",
+                CATEGORY_CLIENT,
+                0.65F,
+                0.4F,
+                1.2F,
+                "Client-only scale for MMCE Networks terminal text. This is hot-reloaded while the terminal GUI is open."
+            );
         } finally {
             if (config.hasChanged()) {
                 config.save();
             }
+            lastLoadedTimestamp = file == null || !file.exists() ? -1L : file.lastModified();
+        }
+    }
+
+    public static void reloadIfChanged() {
+        if (configFile == null) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastReloadCheckAt < HOT_RELOAD_CHECK_INTERVAL_MS) {
+            return;
+        }
+        lastReloadCheckAt = now;
+
+        long timestamp = configFile.exists() ? configFile.lastModified() : -1L;
+        if (timestamp != lastLoadedTimestamp) {
+            load(configFile);
         }
     }
 }

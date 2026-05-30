@@ -4,7 +4,7 @@ import com.mmce.networks.common.init.ModItems;
 import com.mmce.networks.common.network.MessageCycleLinkerMode;
 import com.mmce.networks.common.network.NetworkHandler;
 import com.mmce.networks.common.util.ItemStackCompat;
-import com.mmce.networks.client.util.ClientCompat;
+import com.mmce.networks.common.util.PlayerCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
@@ -19,12 +19,12 @@ public class LinkerModeInputHandler {
             return;
         }
 
-        Minecraft minecraft = ClientCompat.getMinecraft();
+        Minecraft minecraft = Minecraft.getMinecraft();
         if (minecraft == null) {
             return;
         }
-        EntityPlayer player = ClientCompat.getPlayer(minecraft);
-        if (player == null || !player.isSneaking() || !isHoldingLinker(player)) {
+        EntityPlayer player = minecraft.player;
+        if (player == null || !PlayerCompat.isSneaking(player) || !isHoldingLinker(player)) {
             return;
         }
 
@@ -33,8 +33,8 @@ public class LinkerModeInputHandler {
     }
 
     private static boolean isHoldingLinker(final EntityPlayer player) {
-        ItemStack mainHand = ClientCompat.getMainHand(player);
-        ItemStack offHand = ClientCompat.getOffHand(player);
+        ItemStack mainHand = player.getHeldItemMainhand();
+        ItemStack offHand = player.getHeldItemOffhand();
         return isLinker(mainHand) || isLinker(offHand);
     }
 

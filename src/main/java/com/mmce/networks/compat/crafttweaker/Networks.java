@@ -9,7 +9,6 @@ import com.mmce.networks.common.config.MMCENetworksConfig;
 import com.mmce.networks.common.handler.TransientSupplyScheduler;
 import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.mmce.MmceReflection;
-import com.mmce.networks.common.util.WorldCompat;
 import crafttweaker.annotations.ZenRegister;
 import crafttweaker.api.data.IData;
 import crafttweaker.api.minecraft.CraftTweakerMC;
@@ -675,7 +674,7 @@ public final class Networks {
 
         World world = tile.getWorld();
         String networkId = REFLECTION.getBoundNetworkId(tile);
-        if (world == null || WorldCompat.isRemote(world) || isNullOrEmpty(networkId)) {
+        if (world == null || world.isRemote || isNullOrEmpty(networkId)) {
             return null;
         }
 
@@ -1040,7 +1039,7 @@ public final class Networks {
             this.world = world;
             this.tile = tile;
             this.networkId = networkId;
-            this.dimension = WorldCompat.getDimension(world);
+            this.dimension = world.provider.getDimension();
             this.savedData = MMCENetworkSavedData.get(world);
         }
 

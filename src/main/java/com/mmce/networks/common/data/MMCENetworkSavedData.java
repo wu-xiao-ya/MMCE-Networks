@@ -1,6 +1,5 @@
 package com.mmce.networks.common.data;
 
-import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.world.World;
@@ -22,9 +21,12 @@ import java.lang.reflect.Method;
 public class MMCENetworkSavedData extends WorldSavedData {
     private static final String DATA_NAME = "mmcenetworks_data";
     private static final String DEFAULT_NETWORK_NAME_PREFIX = "网络系统-";
+    private static final int DEFAULT_NETWORK_COLOR = 0xFF6E859D;
 
     private final Map<NetworkKey, NBTTagCompound> networks = new HashMap<>();
     private final Map<NetworkKey, String> networkDisplayNames = new HashMap<>();
+    private final Map<NetworkKey, Integer> networkColors = new HashMap<>();
+    private final Set<NetworkKey> pinnedNetworks = new HashSet<>();
     private final Map<NetworkPoolKey, NetworkResourcePool.ResourcePoolTotals> resourcePoolTotalsCache = new HashMap<>();
     private final Map<ControllerKey, ControllerSnapshot> controllerSnapshots = new HashMap<>();
     private final Map<Integer, Set<Long>> controllersByDimension = new HashMap<>();
@@ -40,7 +42,7 @@ public class MMCENetworkSavedData extends WorldSavedData {
     }
 
     public static MMCENetworkSavedData get(final World world) {
-        MapStorage storage = WorldCompat.getPerWorldStorage(world);
+        MapStorage storage = world.getPerWorldStorage();
         if (storage == null) {
             return new MMCENetworkSavedData();
         }
@@ -174,8 +176,11 @@ public class MMCENetworkSavedData extends WorldSavedData {
     }
 
     public void removeNetwork(final int dimension, final String networkId) {
-        if (networks.remove(new NetworkKey(dimension, networkId)) != null) {
-            networkDisplayNames.remove(new NetworkKey(dimension, networkId));
+        NetworkKey key = new NetworkKey(dimension, networkId);
+        if (networks.remove(key) != null) {
+            networkDisplayNames.remove(key);
+            networkColors.remove(key);
+            pinnedNetworks.remove(key);
             invalidateAllResourcePoolTotals(dimension, networkId);
             markDirty();
         }
@@ -185,10 +190,15 @@ public class MMCENetworkSavedData extends WorldSavedData {
         List<NetworkRef> refs = new ArrayList<>();
         for (NetworkKey key : networks.keySet()) {
             if (key.dimension == dimension) {
-                refs.add(new NetworkRef(key.dimension, key.networkId, ensureDisplayName(key)));
+                refs.add(new NetworkRef(key.dimension, key.networkId, ensureDisplayName(key), ensureColor(key), pinnedNetworks.contains(key)));
             }
         }
-        refs.sort((left, right) -> left.displayName.compareToIgnoreCase(right.displayName));
+        refs.sort((left, right) -> {
+            if (left.pinned != right.pinned) {
+                return left.pinned ? -1 : 1;
+            }
+            return left.displayName.compareToIgnoreCase(right.displayName);
+        });
         return refs;
     }
 
@@ -205,6 +215,34 @@ public class MMCENetworkSavedData extends WorldSavedData {
         }
         networkDisplayNames.put(key, normalized);
         markDirty();
+    }
+
+    public int getNetworkColor(final int dimension, final String networkId) {
+        return ensureColor(new NetworkKey(dimension, networkId));
+    }
+
+    public void setNetworkColor(final int dimension, final String networkId, final int color) {
+        NetworkKey key = new NetworkKey(dimension, networkId);
+        networks.computeIfAbsent(key, ignored -> new NBTTagCompound());
+        int normalized = normalizeColor(color);
+        if (normalized == ensureColor(key)) {
+            return;
+        }
+        networkColors.put(key, normalized);
+        markDirty();
+    }
+
+    public boolean isNetworkPinned(final int dimension, final String networkId) {
+        return pinnedNetworks.contains(new NetworkKey(dimension, networkId));
+    }
+
+    public void setNetworkPinned(final int dimension, final String networkId, final boolean pinned) {
+        NetworkKey key = new NetworkKey(dimension, networkId);
+        networks.computeIfAbsent(key, ignored -> new NBTTagCompound());
+        boolean changed = pinned ? pinnedNetworks.add(key) : pinnedNetworks.remove(key);
+        if (changed) {
+            markDirty();
+        }
     }
 
     public ControllerSnapshot getControllerSnapshot(final int dimension, final long pos) {
@@ -250,6 +288,8 @@ public class MMCENetworkSavedData extends WorldSavedData {
     public void readFromNBT(final NBTTagCompound nbt) {
         networks.clear();
         networkDisplayNames.clear();
+        networkColors.clear();
+        pinnedNetworks.clear();
         resourcePoolTotalsCache.clear();
         controllerSnapshots.clear();
         controllersByDimension.clear();
@@ -278,6 +318,25 @@ public class MMCENetworkSavedData extends WorldSavedData {
 
             NetworkKey key = new NetworkKey(entry.getInteger("dimension"), entry.getString("networkId"));
             networkDisplayNames.put(key, normalizeDisplayName(entry.getString("displayName")));
+        }
+
+        NBTTagList colorList = nbt.getTagList("networkColors", Constants.NBT.TAG_COMPOUND);
+        for (int i = 0; i < colorList.tagCount(); i++) {
+            NBTTagCompound entry = colorList.getCompoundTagAt(i);
+            if (!entry.hasKey("networkId", Constants.NBT.TAG_STRING)) {
+                continue;
+            }
+            NetworkKey key = new NetworkKey(entry.getInteger("dimension"), entry.getString("networkId"));
+            networkColors.put(key, normalizeColor(entry.getInteger("color")));
+        }
+
+        NBTTagList pinnedList = nbt.getTagList("pinnedNetworks", Constants.NBT.TAG_COMPOUND);
+        for (int i = 0; i < pinnedList.tagCount(); i++) {
+            NBTTagCompound entry = pinnedList.getCompoundTagAt(i);
+            if (!entry.hasKey("networkId", Constants.NBT.TAG_STRING)) {
+                continue;
+            }
+            pinnedNetworks.add(new NetworkKey(entry.getInteger("dimension"), entry.getString("networkId")));
         }
 
         NBTTagList snapshotList = nbt.getTagList("controllerSnapshots", Constants.NBT.TAG_COMPOUND);
@@ -323,6 +382,26 @@ public class MMCENetworkSavedData extends WorldSavedData {
             displayNameList.appendTag(tag);
         }
         compound.setTag("networkDisplayNames", displayNameList);
+
+        NBTTagList colorList = new NBTTagList();
+        for (Map.Entry<NetworkKey, Integer> entry : networkColors.entrySet()) {
+            NBTTagCompound tag = new NBTTagCompound();
+            tag.setInteger("dimension", entry.getKey().dimension);
+            tag.setString("networkId", entry.getKey().networkId);
+            tag.setInteger("color", normalizeColor(entry.getValue()));
+            colorList.appendTag(tag);
+        }
+        compound.setTag("networkColors", colorList);
+
+        NBTTagList pinnedList = new NBTTagList();
+        for (NetworkKey key : pinnedNetworks) {
+            NBTTagCompound tag = new NBTTagCompound();
+            tag.setInteger("dimension", key.dimension);
+            tag.setString("networkId", key.networkId);
+            pinnedList.appendTag(tag);
+        }
+        compound.setTag("pinnedNetworks", pinnedList);
+
         compound.setInteger("nextNetworkDisplayIndex", Math.max(1, nextNetworkDisplayIndex));
 
         NBTTagList snapshotList = new NBTTagList();
@@ -347,7 +426,18 @@ public class MMCENetworkSavedData extends WorldSavedData {
 
         String generated = DEFAULT_NETWORK_NAME_PREFIX + Math.max(1, nextNetworkDisplayIndex++);
         networkDisplayNames.put(key, generated);
+        markDirty();
         return generated;
+    }
+
+    private int ensureColor(final NetworkKey key) {
+        Integer current = networkColors.get(key);
+        if (current != null) {
+            return normalizeColor(current);
+        }
+        networkColors.put(key, DEFAULT_NETWORK_COLOR);
+        markDirty();
+        return DEFAULT_NETWORK_COLOR;
     }
 
     private String normalizeDisplayName(@Nullable final String displayName) {
@@ -356,6 +446,10 @@ public class MMCENetworkSavedData extends WorldSavedData {
         }
         String normalized = displayName.trim();
         return normalized.isEmpty() ? DEFAULT_NETWORK_NAME_PREFIX + Math.max(1, nextNetworkDisplayIndex++) : normalized;
+    }
+
+    private int normalizeColor(final int color) {
+        return 0xFF000000 | (color & 0x00FFFFFF);
     }
 
     private void addControllerIndex(final int dimension, final long pos, final String networkId) {
@@ -427,11 +521,15 @@ public class MMCENetworkSavedData extends WorldSavedData {
         private final int dimension;
         private final String networkId;
         private final String displayName;
+        private final int color;
+        private final boolean pinned;
 
-        public NetworkRef(final int dimension, final String networkId, final String displayName) {
+        public NetworkRef(final int dimension, final String networkId, final String displayName, final int color, final boolean pinned) {
             this.dimension = dimension;
             this.networkId = networkId;
             this.displayName = displayName;
+            this.color = color;
+            this.pinned = pinned;
         }
 
         public int getDimension() {
@@ -444,6 +542,14 @@ public class MMCENetworkSavedData extends WorldSavedData {
 
         public String getDisplayName() {
             return displayName;
+        }
+
+        public int getColor() {
+            return color;
+        }
+
+        public boolean isPinned() {
+            return pinned;
         }
     }
 

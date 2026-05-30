@@ -1,15 +1,14 @@
 package com.mmce.networks.common.network;
 
-import com.mmce.networks.client.gui.NetworkTerminalClientState;
-import com.mmce.networks.client.util.ClientCompat;
-import com.mmce.networks.common.data.NetworkValueDisplayRegistry;
 import io.netty.buffer.ByteBuf;
-import net.minecraft.client.Minecraft;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.fml.common.network.ByteBufUtils;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 public class MessageSyncNetworkSnapshot implements IMessage {
     private String networkId;
@@ -60,19 +59,35 @@ public class MessageSyncNetworkSnapshot implements IMessage {
     public static class Handler implements IMessageHandler<MessageSyncNetworkSnapshot, IMessage> {
         @Override
         public IMessage onMessage(final MessageSyncNetworkSnapshot message, final MessageContext ctx) {
-            Minecraft minecraft = ClientCompat.getMinecraft();
-            if (minecraft != null) {
-                ClientCompat.addScheduledTask(
-                    minecraft,
-                    () -> NetworkTerminalClientState.applySnapshot(
-                        message.networkId,
-                        message.sharedData,
-                        NetworkValueDisplayRegistry.fromNbt(message.valueDisplayConfig),
-                        NetworkTerminalClientState.readNetworkSummaries(message.networkListData)
-                    )
-                );
-            }
+            ClientMessageDispatcher.applyNetworkSnapshot(
+                message.networkId,
+                message.sharedData,
+                message.valueDisplayConfig,
+                message.networkListData
+            );
             return null;
+        }
+    }
+
+    private static final class ClientMessageDispatcher {
+        private static void applyNetworkSnapshot(
+            final String networkId,
+            final NBTTagCompound sharedData,
+            final NBTTagCompound valueDisplayConfig,
+            final NBTTagCompound networkListData
+        ) {
+            try {
+                Class<?> dispatcherClass = Class.forName("com.mmce.networks.client.network.ClientNetworkMessageHandlers");
+                Method method = dispatcherClass.getMethod(
+                    "applyNetworkSnapshot",
+                    String.class,
+                    NBTTagCompound.class,
+                    NBTTagCompound.class,
+                    NBTTagCompound.class
+                );
+                method.invoke(null, networkId, sharedData, valueDisplayConfig, networkListData);
+            } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+            }
         }
     }
 }

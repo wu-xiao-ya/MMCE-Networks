@@ -4,12 +4,14 @@ import com.mmce.networks.MMCENetworksMod;
 import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.mmce.MmceReflection;
+import com.mmce.networks.common.network.MessageOpenNetworkTerminal;
+import com.mmce.networks.common.network.NetworkHandler;
 import com.mmce.networks.common.util.ItemStackCompat;
 import com.mmce.networks.common.util.PlayerCompat;
-import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -85,22 +87,18 @@ public class ItemNetworkLinker extends Item {
 
         ItemStack stack = PlayerCompat.getHeldItem(player, hand);
         if (stack == null) {
-            return new ActionResult<>(EnumActionResult.PASS, ItemStack.EMPTY);
+            return new ActionResult<>(EnumActionResult.PASS, new ItemStack(this));
         }
-        if (!player.isSneaking()) {
-            if (isNullOrEmpty(getNetworkId(stack))) {
-                if (WorldCompat.isRemote(world)) {
-                    sendLinkerMessage(player, world, new TextComponentString(TextFormatting.RED + "这个网络绑定器还没有写入网络 ID"), false);
-                }
-                return new ActionResult<>(EnumActionResult.FAIL, stack);
-            }
-            if (WorldCompat.isRemote(world)) {
-                openTerminalScreen(stack);
+        if (!PlayerCompat.isSneaking(player)) {
+            String networkId = getNetworkId(stack);
+            if (!world.isRemote) {
+                networkId = ensureNetworkForTerminal(player, world, stack, networkId);
+                openTerminalForServerPlayer(player, networkId);
             }
             return new ActionResult<>(EnumActionResult.SUCCESS, stack);
         }
 
-        if (!WorldCompat.isRemote(world)) {
+        if (!world.isRemote) {
             if (isDuplicateAction(stack, world)) {
                 return new ActionResult<>(EnumActionResult.SUCCESS, stack);
             }
@@ -135,12 +133,12 @@ public class ItemNetworkLinker extends Item {
             return EnumActionResult.PASS;
         }
 
-        TileEntity tile = WorldCompat.getTileEntity(world, pos);
+        TileEntity tile = world.getTileEntity(pos);
         if (!reflection.isControllerTile(tile)) {
-            return EnumActionResult.PASS;
+            return openTerminalFromBlockUse(player, world, hand);
         }
 
-        if (WorldCompat.isRemote(world)) {
+        if (world.isRemote) {
             return EnumActionResult.SUCCESS;
         }
 
@@ -179,7 +177,7 @@ public class ItemNetworkLinker extends Item {
         }
 
         MMCENetworkSavedData data = MMCENetworkSavedData.get(world);
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         data.registerNetwork(dimension, networkId);
         NBTTagCompound sharedData = data.getNetworkData(dimension, networkId);
         reflection.setSharedData(tile, networkId, sharedData);
@@ -271,7 +269,7 @@ public class ItemNetworkLinker extends Item {
 
         reflection.clearSharedData(tile);
         reflection.markForUpdateSync(tile);
-        MMCENetworkSavedData.get(world).removeControllerSnapshot(WorldCompat.getDimension(world), pos);
+        MMCENetworkSavedData.get(world).removeControllerSnapshot(world.provider.getDimension(), pos);
         sendLinkerMessage(player, world, colorPair(TextFormatting.GOLD, "已解绑控制器网络: ", TextFormatting.AQUA, boundNetworkId), false);
     }
 
@@ -310,6 +308,46 @@ public class ItemNetworkLinker extends Item {
         return "net_" + UUID.randomUUID().toString().replace("-", "");
     }
 
+    private String ensureNetworkForTerminal(
+        final EntityPlayer player,
+        final World world,
+        final ItemStack stack,
+        @Nullable final String currentNetworkId
+    ) {
+        if (!isNullOrEmpty(currentNetworkId)) {
+            MMCENetworkApi.registerNetwork(world, currentNetworkId);
+            return currentNetworkId;
+        }
+
+        String networkId = createNetworkId();
+        setNetworkId(stack, networkId);
+        MMCENetworkApi.registerNetwork(world, networkId);
+        sendLinkerMessage(
+            player,
+            world,
+            colorPair(TextFormatting.GREEN, "已创建网络: ", TextFormatting.AQUA, MMCENetworkApi.getNetworkDisplayName(world, networkId)),
+            false
+        );
+        return networkId;
+    }
+
+    private EnumActionResult openTerminalFromBlockUse(final EntityPlayer player, final World world, final EnumHand hand) {
+        if (PlayerCompat.isSneaking(player)) {
+            return EnumActionResult.PASS;
+        }
+
+        ItemStack stack = PlayerCompat.getHeldItem(player, hand);
+        if (stack == null) {
+            return EnumActionResult.PASS;
+        }
+
+        if (!world.isRemote) {
+            String networkId = ensureNetworkForTerminal(player, world, stack, getNetworkId(stack));
+            openTerminalForServerPlayer(player, networkId);
+        }
+        return EnumActionResult.SUCCESS;
+    }
+
     private static boolean isNullOrEmpty(@Nullable final String value) {
         return value == null || value.isEmpty();
     }
@@ -320,7 +358,7 @@ public class ItemNetworkLinker extends Item {
             tag = new NBTTagCompound();
         }
 
-        long tick = WorldCompat.getTotalWorldTime(world);
+        long tick = world.getTotalWorldTime();
         if (tag.getLong(TAG_LAST_ACTION) == tick) {
             return true;
         }
@@ -349,7 +387,7 @@ public class ItemNetworkLinker extends Item {
             return;
         }
 
-        long tick = world == null ? 0L : WorldCompat.getTotalWorldTime(world);
+        long tick = world == null ? 0L : world.getTotalWorldTime();
         String key = player.getName() + "|" + actionBar + "|" + message.getUnformattedText();
         long now = System.currentTimeMillis();
         synchronized (RECENT_MESSAGES) {
@@ -368,12 +406,9 @@ public class ItemNetworkLinker extends Item {
         PlayerCompat.sendStatusMessage(player, message, actionBar);
     }
 
-    private void openTerminalScreen(final ItemStack stack) {
-        try {
-            Class<?> openerClass = Class.forName("com.mmce.networks.client.gui.NetworkTerminalOpener");
-            Method method = openerClass.getMethod("openForStack", ItemStack.class);
-            method.invoke(null, stack);
-        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+    private void openTerminalForServerPlayer(final EntityPlayer player, final String networkId) {
+        if (player instanceof EntityPlayerMP && !isNullOrEmpty(networkId)) {
+            NetworkHandler.CHANNEL.sendTo(new MessageOpenNetworkTerminal(networkId), (EntityPlayerMP) player);
         }
     }
 

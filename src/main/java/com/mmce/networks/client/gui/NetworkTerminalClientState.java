@@ -123,7 +123,12 @@ public final class NetworkTerminalClientState {
             String id = entry.getString("id");
             String displayName = entry.getString("displayName");
             if (id != null && !id.isEmpty()) {
-                result.add(new NetworkSummary(id, displayName == null || displayName.isEmpty() ? id : displayName));
+                result.add(new NetworkSummary(
+                    id,
+                    displayName == null || displayName.isEmpty() ? id : displayName,
+                    entry.hasKey("color") ? entry.getInteger("color") : 0xFF6E859D,
+                    entry.getBoolean("pinned")
+                ));
             }
         }
         return result;
@@ -132,10 +137,14 @@ public final class NetworkTerminalClientState {
     public static final class NetworkSummary {
         private final String networkId;
         private final String displayName;
+        private final int color;
+        private final boolean pinned;
 
-        public NetworkSummary(final String networkId, final String displayName) {
+        public NetworkSummary(final String networkId, final String displayName, final int color, final boolean pinned) {
             this.networkId = networkId;
             this.displayName = displayName;
+            this.color = color;
+            this.pinned = pinned;
         }
 
         public String getNetworkId() {
@@ -144,6 +153,14 @@ public final class NetworkTerminalClientState {
 
         public String getDisplayName() {
             return displayName;
+        }
+
+        public int getColor() {
+            return color;
+        }
+
+        public boolean isPinned() {
+            return pinned;
         }
     }
 }

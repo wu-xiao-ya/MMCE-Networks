@@ -1,12 +1,11 @@
 package com.mmce.networks.client.handler;
 
-import com.mmce.networks.client.util.ClientCompat;
 import com.mmce.networks.common.item.ItemNetworkLinker;
 import com.mmce.networks.common.network.MessageRequestHighlightSync;
 import com.mmce.networks.common.network.NetworkHandler;
 import com.mmce.networks.common.util.ItemStackCompat;
-import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.client.Minecraft;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.item.ItemStack;
@@ -51,18 +50,18 @@ public class NetworkHighlightRenderer {
     }
 
     private void render(final RenderWorldLastEvent event) {
-        Minecraft minecraft = ClientCompat.getMinecraft();
-        net.minecraft.world.World world = ClientCompat.getWorld(minecraft);
+        Minecraft minecraft = Minecraft.getMinecraft();
+        net.minecraft.world.World world = minecraft == null ? null : minecraft.world;
         if (minecraft == null || world == null) {
             return;
         }
 
-        net.minecraft.entity.player.EntityPlayer player = ClientCompat.getPlayer(minecraft);
+        EntityPlayer player = minecraft.player;
         if (player == null) {
             return;
         }
 
-        String networkId = getHeldNetworkId(ClientCompat.getMainHand(player), ClientCompat.getOffHand(player));
+        String networkId = getHeldNetworkId(player.getHeldItemMainhand(), player.getHeldItemOffhand());
         if (isNullOrEmpty(networkId)) {
             clearHighlights();
             lastRequestedNetworkId = "";
@@ -109,7 +108,7 @@ public class NetworkHighlightRenderer {
     }
 
     private void requestSyncIfNeeded(final net.minecraft.world.World world, final String networkId) {
-        long tick = WorldCompat.getTotalWorldTime(world);
+        long tick = world.getTotalWorldTime();
         if (networkId.equals(lastRequestedNetworkId) && tick - lastRequestTick < REQUEST_INTERVAL_TICKS) {
             return;
         }

@@ -1,7 +1,6 @@
 package com.mmce.networks.common.handler;
 
 import com.mmce.networks.common.data.NetworkResourcePool;
-import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.world.World;
 
@@ -31,7 +30,7 @@ public final class TransientSupplyScheduler {
         final long amount,
         final long expiresAt
     ) {
-        if (world == null || WorldCompat.isRemote(world) || isNullOrEmpty(networkId) || isNullOrEmpty(key) || isNullOrEmpty(source)) {
+        if (world == null || world.isRemote || isNullOrEmpty(networkId) || isNullOrEmpty(key) || isNullOrEmpty(source)) {
             return 0L;
         }
 
@@ -61,7 +60,7 @@ public final class TransientSupplyScheduler {
     }
 
     public static void process(final World world, final int dimension) {
-        if (world == null || WorldCompat.isRemote(world)) {
+        if (world == null || world.isRemote) {
             return;
         }
 

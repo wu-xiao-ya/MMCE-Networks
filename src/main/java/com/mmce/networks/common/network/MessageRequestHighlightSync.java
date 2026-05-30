@@ -3,7 +3,6 @@ package com.mmce.networks.common.network;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.item.ItemNetworkLinker;
 import com.mmce.networks.common.util.ItemStackCompat;
-import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.BlockPos;
@@ -49,7 +48,7 @@ public class MessageRequestHighlightSync implements IMessage {
 
             List<BlockPos> positions = new ArrayList<>();
             MMCENetworkSavedData data = MMCENetworkSavedData.get(player.world);
-            for (Long pos : data.getControllerPositions(WorldCompat.getDimension(player.world), networkId)) {
+            for (Long pos : data.getControllerPositions(player.world.provider.getDimension(), networkId)) {
                 positions.add(BlockPos.fromLong(pos));
             }
             NetworkHandler.CHANNEL.sendTo(new MessageSyncHighlightPositions(positions), player);

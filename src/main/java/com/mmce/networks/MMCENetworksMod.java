@@ -17,12 +17,12 @@ import java.lang.reflect.Method;
     name = MMCENetworksMod.MOD_NAME,
     version = MMCENetworksMod.VERSION,
     acceptedMinecraftVersions = "[1.12.2]",
-    dependencies = "required-after:modularui;after:modularmachinery"
+    dependencies = "after:modularmachinery"
 )
 public class MMCENetworksMod {
     public static final String MOD_ID = "mmcenetworks";
     public static final String MOD_NAME = "Modular Machinery: Community Edition Networks";
-    public static final String VERSION = "0.1.0";
+    public static final String VERSION = "0.2.0";
     public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
 
     @Mod.EventHandler

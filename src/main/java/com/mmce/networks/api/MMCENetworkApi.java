@@ -5,7 +5,6 @@ import com.mmce.networks.common.data.NetworkTechTree;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.handler.ControllerNetworkSyncHandler;
 import com.mmce.networks.common.handler.TransientSupplyScheduler;
-import com.mmce.networks.common.util.WorldCompat;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.world.World;
@@ -15,32 +14,54 @@ public final class MMCENetworkApi {
     }
 
     public static NBTTagCompound getSharedData(final World world, final String networkId) {
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         NBTTagCompound sharedData = MMCENetworkSavedData.get(world).getNetworkData(dimension, networkId);
         TransientSupplyScheduler.applyTransientSupplies(sharedData, dimension, networkId);
         return sharedData;
     }
 
     public static void setSharedData(final World world, final String networkId, final NBTTagCompound sharedData) {
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         MMCENetworkSavedData.get(world).putNetworkData(dimension, networkId, sharedData);
         ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
     }
 
     public static void registerNetwork(final World world, final String networkId) {
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         MMCENetworkSavedData.get(world).registerNetwork(dimension, networkId);
         ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
     }
 
     public static String getNetworkDisplayName(final World world, final String networkId) {
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         return MMCENetworkSavedData.get(world).getNetworkDisplayName(dimension, networkId);
     }
 
     public static void setNetworkDisplayName(final World world, final String networkId, final String displayName) {
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         MMCENetworkSavedData.get(world).setNetworkDisplayName(dimension, networkId, displayName);
+        ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
+    }
+
+    public static int getNetworkColor(final World world, final String networkId) {
+        int dimension = world.provider.getDimension();
+        return MMCENetworkSavedData.get(world).getNetworkColor(dimension, networkId);
+    }
+
+    public static void setNetworkColor(final World world, final String networkId, final int color) {
+        int dimension = world.provider.getDimension();
+        MMCENetworkSavedData.get(world).setNetworkColor(dimension, networkId, color);
+        ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
+    }
+
+    public static boolean isNetworkPinned(final World world, final String networkId) {
+        int dimension = world.provider.getDimension();
+        return MMCENetworkSavedData.get(world).isNetworkPinned(dimension, networkId);
+    }
+
+    public static void setNetworkPinned(final World world, final String networkId, final boolean pinned) {
+        int dimension = world.provider.getDimension();
+        MMCENetworkSavedData.get(world).setNetworkPinned(dimension, networkId, pinned);
         ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
     }
 
@@ -61,7 +82,7 @@ public final class MMCENetworkApi {
 
     public static long getResourceCapacity(final World world, final String networkId, final String key) {
         MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         synchronized (savedData) {
             return savedData.getResourcePoolTotals(dimension, networkId, key).getTotalSupply();
         }
@@ -69,7 +90,7 @@ public final class MMCENetworkApi {
 
     public static long getResourceUsage(final World world, final String networkId, final String key) {
         MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         synchronized (savedData) {
             return savedData.getResourcePoolTotals(dimension, networkId, key).getUsed();
         }
@@ -77,7 +98,7 @@ public final class MMCENetworkApi {
 
     public static long getResourceAvailable(final World world, final String networkId, final String key) {
         MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         synchronized (savedData) {
             return savedData.getResourcePoolTotals(dimension, networkId, key).getAvailable();
         }
@@ -176,13 +197,13 @@ public final class MMCENetworkApi {
     private static <T> T withSharedData(final World world, final String networkId, final SharedDataOperation<T> operation) {
         MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
         synchronized (savedData) {
-            return operation.run(savedData.getNetworkData(WorldCompat.getDimension(world), networkId));
+            return operation.run(savedData.getNetworkData(world.provider.getDimension(), networkId));
         }
     }
 
     private static <T> T mutateSharedData(final World world, final String networkId, final SharedDataOperation<T> operation) {
         MMCENetworkSavedData savedData = MMCENetworkSavedData.get(world);
-        int dimension = WorldCompat.getDimension(world);
+        int dimension = world.provider.getDimension();
         synchronized (savedData) {
             NBTTagCompound data = savedData.getNetworkDataMutable(dimension, networkId);
             T result = operation.run(data);

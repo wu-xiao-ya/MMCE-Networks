@@ -4,7 +4,6 @@ import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.data.MMCENetworkSavedData.NetworkRef;
 import com.mmce.networks.common.data.NetworkValueDisplayRegistry;
-import com.mmce.networks.common.util.WorldCompat;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
@@ -62,12 +61,14 @@ public class MessageRequestNetworkSnapshot implements IMessage {
             }
 
             MMCENetworkSavedData savedData = MMCENetworkSavedData.get(player.world);
-            List<NetworkRef> refs = savedData.getNetworkKeys(WorldCompat.getDimension(player.world));
+            List<NetworkRef> refs = savedData.getNetworkKeys(player.world.provider.getDimension());
             NBTTagList entries = new NBTTagList();
             for (NetworkRef ref : refs) {
                 NBTTagCompound entry = new NBTTagCompound();
                 entry.setString("id", ref.getNetworkId());
                 entry.setString("displayName", ref.getDisplayName());
+                entry.setInteger("color", ref.getColor());
+                entry.setBoolean("pinned", ref.isPinned());
                 entries.appendTag(entry);
             }
             root.setTag("entries", entries);

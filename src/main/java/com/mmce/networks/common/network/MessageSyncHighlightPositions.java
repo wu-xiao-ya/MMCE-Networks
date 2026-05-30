@@ -1,12 +1,12 @@
 package com.mmce.networks.common.network;
 
-import com.mmce.networks.client.handler.NetworkHighlightRenderer;
-import net.minecraft.client.Minecraft;
 import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,8 +42,19 @@ public class MessageSyncHighlightPositions implements IMessage {
     public static class Handler implements IMessageHandler<MessageSyncHighlightPositions, IMessage> {
         @Override
         public IMessage onMessage(final MessageSyncHighlightPositions message, final MessageContext ctx) {
-            Minecraft.getMinecraft().addScheduledTask(() -> NetworkHighlightRenderer.updateHighlights(message.positions));
+            ClientMessageDispatcher.updateHighlights(message.positions);
             return null;
+        }
+    }
+
+    private static final class ClientMessageDispatcher {
+        private static void updateHighlights(final List<BlockPos> positions) {
+            try {
+                Class<?> dispatcherClass = Class.forName("com.mmce.networks.client.network.ClientNetworkMessageHandlers");
+                Method method = dispatcherClass.getMethod("updateHighlights", List.class);
+                method.invoke(null, positions);
+            } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+            }
         }
     }
 }

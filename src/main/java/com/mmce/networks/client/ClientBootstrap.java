@@ -1,8 +1,8 @@
 package com.mmce.networks.client;
 
+import com.mmce.networks.client.handler.ClientModelRegistryHandler;
 import com.mmce.networks.client.handler.LinkerModeInputHandler;
 import com.mmce.networks.client.handler.NetworkHighlightRenderer;
-import com.mmce.networks.client.handler.NetworkTerminalOpenHandler;
 import net.minecraftforge.common.MinecraftForge;
 
 public final class ClientBootstrap {
@@ -19,6 +19,6 @@ public final class ClientBootstrap {
 
         MinecraftForge.EVENT_BUS.register(new LinkerModeInputHandler());
         MinecraftForge.EVENT_BUS.register(new NetworkHighlightRenderer());
-        MinecraftForge.EVENT_BUS.register(new NetworkTerminalOpenHandler());
+        MinecraftForge.EVENT_BUS.register(new ClientModelRegistryHandler());
     }
 }
