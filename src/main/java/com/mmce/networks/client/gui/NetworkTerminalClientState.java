@@ -9,6 +9,7 @@ import net.minecraftforge.common.util.Constants;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public final class NetworkTerminalClientState {
@@ -82,6 +83,28 @@ public final class NetworkTerminalClientState {
         return new ArrayList<>(availableNetworks);
     }
 
+    public static void applyLocalStyle(final String networkId, final int color, final boolean pinned) {
+        if (networkId == null || networkId.isEmpty()) {
+            return;
+        }
+        List<NetworkSummary> updated = new ArrayList<>();
+        boolean changed = false;
+        for (NetworkSummary summary : availableNetworks) {
+            if (summary.networkId.equals(networkId)) {
+                updated.add(new NetworkSummary(summary.networkId, summary.displayName, color, pinned));
+                changed = true;
+            } else {
+                updated.add(summary);
+            }
+        }
+        if (!changed) {
+            return;
+        }
+        sortNetworkSummaries(updated);
+        availableNetworks = updated;
+        stateRevision++;
+    }
+
     public static List<String> getAvailableNetworkIds() {
         List<String> ids = new ArrayList<>();
         for (NetworkSummary summary : availableNetworks) {
@@ -131,7 +154,15 @@ public final class NetworkTerminalClientState {
                 ));
             }
         }
+        sortNetworkSummaries(result);
         return result;
+    }
+
+    private static void sortNetworkSummaries(final List<NetworkSummary> summaries) {
+        summaries.sort(Comparator
+            .comparing(NetworkSummary::isPinned).reversed()
+            .thenComparing(NetworkSummary::getDisplayName, String.CASE_INSENSITIVE_ORDER)
+        );
     }
 
     public static final class NetworkSummary {
