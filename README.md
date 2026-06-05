@@ -203,17 +203,6 @@ Networks.setString(event.controller, "hint", "反应堆运行稳定");
 
 使用示例前请先把脚本中的机器注册名改成你自己的 MMCE 机器名，然后放入 CraftTweaker scripts 目录。
 
-## 开发说明
-
-本模组是 MMCE 附属模组，开发时不要修改 MMCE 本体。网络数据保存在世界存档中，控制器通过绑定器写入网络 ID，脚本通过控制器上下文读写对应网络。
-
-推荐开发检查：
-
-```powershell
-git status --short --branch
-.\gradlew.bat --no-daemon build --max-workers=1 --console=plain
-```
-
 ## 许可证
 
 当前仓库尚未提供明确许可证文件。若需要在整合包、二次开发或公开分发中使用，请先联系作者确认授权范围。
