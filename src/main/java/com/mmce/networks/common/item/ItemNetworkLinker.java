@@ -2,6 +2,7 @@ package com.mmce.networks.common.item;
 
 import com.mmce.networks.MMCENetworksMod;
 import com.mmce.networks.api.MMCENetworkApi;
+import com.mmce.networks.common.data.NetworkAccess;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.mmce.MmceReflection;
 import com.mmce.networks.common.network.MessageOpenNetworkTerminal;
@@ -104,7 +105,7 @@ public class ItemNetworkLinker extends Item {
             }
             String networkId = createNetworkId();
             setNetworkId(stack, networkId);
-            MMCENetworkApi.registerNetwork(world, networkId);
+            MMCENetworkApi.registerNetwork(world, networkId, player.getUniqueID());
             sendLinkerMessage(
                 player,
                 world,
@@ -167,7 +168,7 @@ public class ItemNetworkLinker extends Item {
         if (isNullOrEmpty(networkId)) {
             networkId = createNetworkId();
             setNetworkId(stack, networkId);
-            MMCENetworkApi.registerNetwork(world, networkId);
+            MMCENetworkApi.registerNetwork(world, networkId, player.getUniqueID());
             sendLinkerMessage(
                 player,
                 world,
@@ -178,7 +179,11 @@ public class ItemNetworkLinker extends Item {
 
         MMCENetworkSavedData data = MMCENetworkSavedData.get(world);
         int dimension = world.provider.getDimension();
-        data.registerNetwork(dimension, networkId);
+        if (player instanceof EntityPlayerMP && !NetworkAccess.canAccess((EntityPlayerMP) player, data, dimension, networkId)) {
+            sendLinkerMessage(player, world, new TextComponentString(TextFormatting.RED + "你没有权限访问这个网络"), false);
+            return EnumActionResult.SUCCESS;
+        }
+        data.registerNetwork(dimension, networkId, player.getUniqueID());
         NBTTagCompound sharedData = data.getNetworkData(dimension, networkId);
         reflection.setSharedData(tile, networkId, sharedData);
         reflection.markForUpdateSync(tile);
@@ -250,6 +255,13 @@ public class ItemNetworkLinker extends Item {
             sendLinkerMessage(player, player == null ? null : player.world, new TextComponentString(TextFormatting.RED + "这个控制器还没有绑定网络"), false);
             return;
         }
+        if (player instanceof EntityPlayerMP && player.world != null) {
+            MMCENetworkSavedData data = MMCENetworkSavedData.get(player.world);
+            if (!NetworkAccess.canAccess((EntityPlayerMP) player, data, player.world.provider.getDimension(), boundNetworkId)) {
+                sendLinkerMessage(player, player.world, new TextComponentString(TextFormatting.RED + "你没有权限复制这个网络"), false);
+                return;
+            }
+        }
 
         setNetworkId(stack, boundNetworkId);
         sendLinkerMessage(
@@ -266,6 +278,13 @@ public class ItemNetworkLinker extends Item {
             sendLinkerMessage(player, world, new TextComponentString(TextFormatting.RED + "这个控制器还没有绑定网络"), false);
             return;
         }
+        if (player instanceof EntityPlayerMP) {
+            MMCENetworkSavedData data = MMCENetworkSavedData.get(world);
+            if (!NetworkAccess.canAccess((EntityPlayerMP) player, data, world.provider.getDimension(), boundNetworkId)) {
+                sendLinkerMessage(player, world, new TextComponentString(TextFormatting.RED + "你没有权限解绑这个网络"), false);
+                return;
+            }
+        }
 
         reflection.clearSharedData(tile);
         reflection.markForUpdateSync(tile);
@@ -275,6 +294,13 @@ public class ItemNetworkLinker extends Item {
 
     private void inspectController(final EntityPlayer player, final TileEntity tile) {
         String boundNetworkId = reflection.getBoundNetworkId(tile);
+        if (!isNullOrEmpty(boundNetworkId) && player instanceof EntityPlayerMP && player.world != null) {
+            MMCENetworkSavedData data = MMCENetworkSavedData.get(player.world);
+            if (!NetworkAccess.canAccess((EntityPlayerMP) player, data, player.world.provider.getDimension(), boundNetworkId)) {
+                sendLinkerMessage(player, player.world, new TextComponentString(TextFormatting.RED + "你没有权限查看这个网络"), false);
+                return;
+            }
+        }
         sendLinkerMessage(
             player,
             player == null ? null : player.world,
@@ -315,13 +341,18 @@ public class ItemNetworkLinker extends Item {
         @Nullable final String currentNetworkId
     ) {
         if (!isNullOrEmpty(currentNetworkId)) {
-            MMCENetworkApi.registerNetwork(world, currentNetworkId);
+            MMCENetworkSavedData data = MMCENetworkSavedData.get(world);
+            if (player instanceof EntityPlayerMP && !NetworkAccess.canAccess((EntityPlayerMP) player, data, world.provider.getDimension(), currentNetworkId)) {
+                sendLinkerMessage(player, world, new TextComponentString(TextFormatting.RED + "你没有权限访问这个网络"), false);
+                return "";
+            }
+            MMCENetworkApi.registerNetwork(world, currentNetworkId, player.getUniqueID());
             return currentNetworkId;
         }
 
         String networkId = createNetworkId();
         setNetworkId(stack, networkId);
-        MMCENetworkApi.registerNetwork(world, networkId);
+        MMCENetworkApi.registerNetwork(world, networkId, player.getUniqueID());
         sendLinkerMessage(
             player,
             world,

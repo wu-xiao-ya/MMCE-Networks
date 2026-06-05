@@ -27,33 +27,58 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class GuiNetworkTerminal extends GuiScreen {
     private static final float GUI_SCALE = 1.5F;
     private static final int PANEL_WIDTH = 219;
     private static final int PANEL_HEIGHT = 146;
     private static final int SIDEBAR_WIDTH = 82;
-    private static final int NETWORK_ROW_COUNT = 5;
-    private static final int EXPANDED_ROW_HEIGHT = 17;
-    private static final int EXPANDED_ROW_GAP = 2;
-    private static final int COMPACT_ROW_HEIGHT = 17;
+    private static final int CONTENT_EXPANDED_LEFT = 82;
+    private static final int CONTENT_COMPACT_LEFT = 29;
+    private static final int CONTENT_RIGHT = 205;
+    private static final int RENAME_FIELD_OFFSET_X = 23;
+    private static final int RENAME_FIELD_Y = 21;
+    private static final int RENAME_SAVE_WIDTH = 20;
+    private static final int RENAME_SAVE_HEIGHT = 12;
+    private static final int REFRESH_WIDTH = 30;
+    private static final int REFRESH_HEIGHT = 12;
+    private static final int EXPANDED_NETWORK_ROW_COUNT = 5;
+    private static final int COMPACT_NETWORK_ROW_COUNT = 8;
+    private static final int EXPANDED_ROW_HEIGHT = 18;
+    private static final int EXPANDED_ROW_GAP = 0;
+    private static final int COMPACT_ROW_HEIGHT = 14;
     private static final int COMPACT_ROW_GAP = 0;
     private static final int EXPANDED_TOGGLE_X = 7;
     private static final int COMPACT_TOGGLE_X = 7;
     private static final int TOGGLE_Y = 7;
-    private static final int EXPANDED_NETWORK_X = 7;
-    private static final int EXPANDED_NETWORK_Y = 26;
-    private static final int EXPANDED_NETWORK_WIDTH = 70;
+    private static final int EXPANDED_NETWORK_X = 8;
+    private static final int EXPANDED_NETWORK_Y = 28;
+    private static final int EXPANDED_NETWORK_WIDTH = 68;
+    private static final int EXPANDED_NETWORK_HEIGHT = 108;
+    private static final int EXPANDED_BUTTON_X = 60;
+    private static final int EXPANDED_BUTTON_WIDTH = 8;
+    private static final int EXPANDED_BUTTON_HEIGHT = 7;
+    private static final int EXPANDED_PIN_BUTTON_Y = 2;
+    private static final int EXPANDED_COLOR_BUTTON_Y = 10;
+    private static final int EXPANDED_NAME_X = 4;
+    private static final int EXPANDED_NAME_Y = 5;
+    private static final int EXPANDED_NAME_WIDTH = EXPANDED_BUTTON_X - EXPANDED_NAME_X - 2;
     private static final int COMPACT_NETWORK_X = 7;
-    private static final int COMPACT_NETWORK_Y = 24;
+    private static final int COMPACT_NETWORK_Y = 25;
     private static final int COMPACT_NETWORK_WIDTH = 16;
-    private static final int COMPACT_NETWORK_HEIGHT = 17;
+    private static final int COMPACT_NETWORK_HEIGHT = 14;
     private static final int COMPACT_ICON_X_OFFSET = 2;
-    private static final int COMPACT_ICON_Y_OFFSET = 2;
+    private static final int COMPACT_ICON_Y_OFFSET = 1;
     private static final int COMPACT_ICON_WIDTH = 12;
     private static final int COMPACT_ICON_HEIGHT = 13;
+    private static final int COMPACT_PIN_ICON_X_OFFSET = 4;
+    private static final int COMPACT_PIN_ICON_Y_OFFSET = 3;
+    private static final int COMPACT_PIN_ICON_WIDTH = 8;
+    private static final int COMPACT_PIN_ICON_HEIGHT = 9;
     private static final int COLOR_PANEL_WIDTH = 47;
     private static final int COLOR_PANEL_HEIGHT = 49;
     private static final int ICON_ATLAS_COLUMNS = 4;
@@ -86,10 +111,10 @@ public class GuiNetworkTerminal extends GuiScreen {
     private static final ResourceLocation TOGGLE_COMPACT_ACTIVE = texture("toggle_compact_2.png");
 
     private static final int[] PALETTE = {
-        0xFFB8332D, 0xFFE36F2C, 0xFFE8B640, 0xFF7FB14B,
-        0xFF43A86F, 0xFF39A6A3, 0xFF3C7FC2, 0xFF504CA8,
-        0xFF7B4AB0, 0xFFC05A9D, 0xFFDD7A8A, 0xFF8B5A3C,
-        0xFFCBC3B5, 0xFF8E8D84, 0xFF4F5860, 0xFF1F242B
+        0xFFAA212B, 0xFF6E4A12, 0xFFD9782F, 0xFFFFCF40,
+        0xFF4EC04E, 0xFF079B6B, 0xFF22B0AE, 0xFF69B9FF,
+        0xFF337FF0, 0xFF6E5CB8, 0xFFC15189, 0xFFD86EAA,
+        0xFFC6C6C6, 0xFF7E7E7E, 0xFF4F4F4F, 0xFF131313
     };
 
     private final String initialNetworkId;
@@ -119,12 +144,11 @@ public class GuiNetworkTerminal extends GuiScreen {
     public void initGui() {
         super.initGui();
         buttonList.clear();
-        int panelLeft = getPanelLeft();
-        int panelTop = getPanelTop();
-        renameField = new GuiTextField(0, fontRenderer, panelLeft + scale(105), panelTop + scale(21), scale(78), scale(12));
+        renameField = new GuiTextField(0, fontRenderer, 0, 0, 0, scale(12));
         renameField.setMaxStringLength(32);
         renameField.setEnableBackgroundDrawing(false);
         renameField.setTextColor(0xFFE8D8B7);
+        updateRenameFieldBounds();
         syncRenameField();
     }
 
@@ -156,18 +180,19 @@ public class GuiNetworkTerminal extends GuiScreen {
         int localX = toLocalX(mouseX);
         int localY = toLocalY(mouseY);
         if (isInside(localX, localY, getNetworkListX(), getNetworkListY(), getNetworkListWidth(), getNetworkListHeight())) {
-            int max = Math.max(0, getNetworks().size() - NETWORK_ROW_COUNT);
+            int max = Math.max(0, getNetworks().size() - getNetworkRowCount());
             networkScrollOffset = clamp(networkScrollOffset + (delta > 0 ? -1 : 1), 0, max);
             return;
         }
 
-        int max = Math.max(0, collectValueCards().size() - 5);
+        int max = Math.max(0, collectDisplayCards().size() - 5);
         valueScrollOffset = clamp(valueScrollOffset + (delta > 0 ? -1 : 1), 0, max);
     }
 
     @Override
     protected void mouseClicked(final int mouseX, final int mouseY, final int mouseButton) throws IOException {
         if (renameField != null) {
+            updateRenameFieldBounds();
             renameField.mouseClicked(mouseX, mouseY, mouseButton);
         }
 
@@ -178,7 +203,7 @@ public class GuiNetworkTerminal extends GuiScreen {
             return;
         }
 
-        if (isInside(localX, localY, 174, 123, 30, 12)) {
+        if (isInside(localX, localY, getRefreshX(), 123, REFRESH_WIDTH, REFRESH_HEIGHT)) {
             NetworkTerminalClientState.requestRefresh();
             return;
         }
@@ -188,7 +213,7 @@ public class GuiNetworkTerminal extends GuiScreen {
             return;
         }
 
-        if (isInside(localX, localY, 186, 21, 20, 12)) {
+        if (isInside(localX, localY, getRenameSaveX(), RENAME_FIELD_Y, RENAME_SAVE_WIDTH, RENAME_SAVE_HEIGHT)) {
             renameCurrentNetwork();
             return;
         }
@@ -198,6 +223,9 @@ public class GuiNetworkTerminal extends GuiScreen {
             if (colorIndex >= 0) {
                 updateNetworkStyle(findNetwork(colorPanelNetworkId), PALETTE[colorIndex], null);
                 colorPanelNetworkId = "";
+                return;
+            }
+            if (isInside(localX, localY, colorPanelX, colorPanelY, COLOR_PANEL_WIDTH, COLOR_PANEL_HEIGHT)) {
                 return;
             }
         }
@@ -213,13 +241,15 @@ public class GuiNetworkTerminal extends GuiScreen {
             NetworkTerminalClientState.NetworkSummary network = networks.get(index);
             int rowX = getNetworkListX();
             int rowY = getNetworkRowY(row);
-            if (sidebarExpanded && isInside(localX, localY, rowX + EXPANDED_NETWORK_WIDTH - 10, rowY + 2, 8, 7)) {
+            int rowHeight = getNetworkRowHeight(row);
+            int dividerY = rowY + rowHeight / 2;
+            if (sidebarExpanded && isInside(localX, localY, rowX + EXPANDED_BUTTON_X, rowY, EXPANDED_BUTTON_WIDTH, dividerY - rowY)) {
                 if (mouseButton == 0) {
                     updateNetworkStyle(network, null, !network.isPinned());
                 }
                 return;
             }
-            if (sidebarExpanded && isInside(localX, localY, rowX + EXPANDED_NETWORK_WIDTH - 10, rowY + 9, 8, 7)) {
+            if (sidebarExpanded && isInside(localX, localY, rowX + EXPANDED_BUTTON_X, dividerY, EXPANDED_BUTTON_WIDTH, rowY + rowHeight - dividerY)) {
                 toggleColorPanel(network, rowX + EXPANDED_NETWORK_WIDTH + 2, rowY - 16);
                 return;
             }
@@ -251,6 +281,7 @@ public class GuiNetworkTerminal extends GuiScreen {
             if (isInside(localX, localY, getToggleX(), TOGGLE_Y, getToggleWidth(), getToggleHeight())) {
                 sidebarExpanded = !sidebarExpanded;
                 colorPanelNetworkId = "";
+                updateRenameFieldBounds();
             }
         }
         togglePressed = false;
@@ -282,6 +313,7 @@ public class GuiNetworkTerminal extends GuiScreen {
         GlStateManager.translate(panelLeft, panelTop, 0.0F);
         GlStateManager.scale(GUI_SCALE, GUI_SCALE, 1.0F);
         drawTexture(sidebarExpanded ? SIDEBAR_EXPANDED : SIDEBAR_COMPACT, 0, 0, PANEL_WIDTH, PANEL_HEIGHT);
+        updateRenameFieldBounds();
         drawToggleButton(localMouseX, localMouseY);
         drawNetworks(localMouseX, localMouseY);
         drawHeader();
@@ -321,8 +353,8 @@ public class GuiNetworkTerminal extends GuiScreen {
         }
 
         String active = getActiveNetworkId();
-        int visibleNameWidth = sidebarExpanded ? 45 : 0;
-        for (int row = 0; row < NETWORK_ROW_COUNT; row++) {
+        int visibleNameWidth = sidebarExpanded ? EXPANDED_NAME_WIDTH : 0;
+        for (int row = 0; row < getNetworkRowCount(); row++) {
             int index = networkScrollOffset + row;
             if (index >= networks.size()) {
                 break;
@@ -335,7 +367,7 @@ public class GuiNetworkTerminal extends GuiScreen {
             int y = getNetworkRowY(row);
 
             if (sidebarExpanded) {
-                drawExpandedNetworkRow(network, selected, hovered, x, y, visibleNameWidth);
+                drawExpandedNetworkRow(network, selected, hovered, x, y, getNetworkRowHeight(row), visibleNameWidth);
             } else {
                 drawCompactNetworkRow(network, selected, hovered, x, y);
             }
@@ -348,18 +380,22 @@ public class GuiNetworkTerminal extends GuiScreen {
         final boolean hovered,
         final int x,
         final int y,
+        final int height,
         final int visibleNameWidth
     ) {
-        drawRect(x, y, x + EXPANDED_NETWORK_WIDTH, y + EXPANDED_ROW_HEIGHT, 0xFF0D0D0D);
-        drawRect(x + 2, y + 2, x + EXPANDED_NETWORK_WIDTH - 2, y + EXPANDED_ROW_HEIGHT - 2, tintNetworkColor(network.getColor(), selected, hovered));
-        drawRect(x + 2, y + EXPANDED_ROW_HEIGHT - 4, x + EXPANDED_NETWORK_WIDTH - 2, y + EXPANDED_ROW_HEIGHT - 3, 0x66000000);
-
         int colorIndex = getPaletteIndex(network.getColor());
-        drawAtlasIcon(network.isPinned() ? PIN_ON_ICONS : PIN_OFF_ICONS, colorIndex, x + EXPANDED_NETWORK_WIDTH - 10, y + 2, 8, 7, COLOR_ICON_ATLAS_WIDTH, COLOR_ICON_ATLAS_HEIGHT, COLOR_ICON_CELL_WIDTH, COLOR_ICON_CELL_HEIGHT);
-        drawAtlasIcon(COLOR_BUTTON_ICONS, colorIndex, x + EXPANDED_NETWORK_WIDTH - 10, y + 9, 8, 7, COLOR_ICON_ATLAS_WIDTH, COLOR_ICON_ATLAS_HEIGHT, COLOR_ICON_CELL_WIDTH, COLOR_ICON_CELL_HEIGHT);
+        int rowColor = PALETTE[colorIndex];
+        drawRect(x, y, x + EXPANDED_NETWORK_WIDTH, y + height, rowColor);
+        drawRect(x, y + Math.max(0, height - 4), x + EXPANDED_NETWORK_WIDTH, y + Math.max(0, height - 3), 0x66000000);
+        drawRect(x + EXPANDED_BUTTON_X - 1, y, x + EXPANDED_NETWORK_WIDTH, y + height, tintButtonStripColor(rowColor));
+        int buttonDividerY = y + height / 2;
+        drawRect(x + EXPANDED_BUTTON_X - 1, buttonDividerY, x + EXPANDED_NETWORK_WIDTH, buttonDividerY + 1, 0x66000000);
+
+        drawAtlasIcon(network.isPinned() ? PIN_ON_ICONS : PIN_OFF_ICONS, colorIndex, x + EXPANDED_BUTTON_X, y + 2, EXPANDED_BUTTON_WIDTH, EXPANDED_BUTTON_HEIGHT, COLOR_ICON_ATLAS_WIDTH, COLOR_ICON_ATLAS_HEIGHT, COLOR_ICON_CELL_WIDTH, COLOR_ICON_CELL_HEIGHT);
+        drawAtlasIcon(COLOR_BUTTON_ICONS, colorIndex, x + EXPANDED_BUTTON_X, buttonDividerY + 2, EXPANDED_BUTTON_WIDTH, EXPANDED_BUTTON_HEIGHT, COLOR_ICON_ATLAS_WIDTH, COLOR_ICON_ATLAS_HEIGHT, COLOR_ICON_CELL_WIDTH, COLOR_ICON_CELL_HEIGHT);
 
         String name = trimToScaledWidth(network.getDisplayName(), visibleNameWidth);
-        drawScaledString(name, x + 6, y + 5, selected ? 0xFFFFFFFF : 0xFFE8E2D7);
+        drawScaledString(name, x + EXPANDED_NAME_X, y + Math.max(4, (height - 8) / 2), selected ? 0xFFFFFFFF : 0xFFE8E2D7);
     }
 
     private void drawCompactNetworkRow(
@@ -371,6 +407,9 @@ public class GuiNetworkTerminal extends GuiScreen {
     ) {
         int colorIndex = getPaletteIndex(network.getColor());
         drawAtlasIcon(NETWORK_OPTION_ICONS, colorIndex, x + COMPACT_ICON_X_OFFSET, y + COMPACT_ICON_Y_OFFSET, COMPACT_ICON_WIDTH, COMPACT_ICON_HEIGHT, OPTION_ICON_ATLAS_WIDTH, OPTION_ICON_ATLAS_HEIGHT, OPTION_ICON_CELL_WIDTH, OPTION_ICON_CELL_HEIGHT);
+        if (network.isPinned()) {
+            drawAtlasIcon(PIN_ON_ICONS, colorIndex, x + COMPACT_PIN_ICON_X_OFFSET, y + COMPACT_PIN_ICON_Y_OFFSET, COMPACT_PIN_ICON_WIDTH, COMPACT_PIN_ICON_HEIGHT, COLOR_ICON_ATLAS_WIDTH, COLOR_ICON_ATLAS_HEIGHT, COLOR_ICON_CELL_WIDTH, COLOR_ICON_CELL_HEIGHT);
+        }
     }
 
     private void drawCompactNetworkTooltip(final int mouseX, final int mouseY, final int localMouseX, final int localMouseY) {
@@ -393,54 +432,116 @@ public class GuiNetworkTerminal extends GuiScreen {
     }
 
     private void drawHeader() {
-        drawScaledString(I18n.format("gui.mmcenetworks.terminal.title"), 96, 7, 0xFFFFE7B8);
-        drawScaledString(I18n.format("gui.mmcenetworks.terminal.rename"), 82, 23, 0xFFD2C2A4);
-        drawScaledString(I18n.format("gui.mmcenetworks.terminal.rename.save"), 187, 23, 0xFFB7D9EF);
-        drawScaledString(buildStatusLine(), 82, 38, 0xFF8FE2A8);
-        drawScaledString(I18n.format("gui.mmcenetworks.terminal.refresh"), 174, 125, 0xFFE9D4AA);
+        int contentLeft = getContentLeft();
+        drawCenteredScaledString(I18n.format("gui.mmcenetworks.terminal.title"), contentLeft, getContentRight(), 7, 0xFFFFE7B8);
+        drawScaledString(I18n.format("gui.mmcenetworks.terminal.rename"), contentLeft, 23, 0xFFD2C2A4);
+        drawScaledString(I18n.format("gui.mmcenetworks.terminal.rename.save"), getRenameSaveX(), 23, 0xFFB7D9EF);
+        drawScaledString(buildStatusLine(), contentLeft, 38, 0xFF8FE2A8);
+        drawScaledString(I18n.format("gui.mmcenetworks.terminal.refresh"), getRefreshX(), 125, 0xFFE9D4AA);
     }
 
     private void drawValues() {
-        List<ValueCard> cards = collectValueCards();
-        int startX = 84;
+        List<DisplayCard> cards = collectDisplayCards();
+        int startX = getContentLeft() + 2;
         int startY = 52;
+        int width = Math.max(80, getContentRight() - startX - 3);
         if (cards.isEmpty()) {
             drawScaledString(I18n.format("gui.mmcenetworks.terminal.values.empty"), startX, startY, 0xFFD7CCBB);
             drawScaledString(I18n.format("gui.mmcenetworks.terminal.values.hint"), startX, startY + 12, 0xFF9E9487);
             return;
         }
 
-        int maxRows = 5;
-        for (int i = 0; i < maxRows; i++) {
-            int index = valueScrollOffset + i;
-            if (index >= cards.size()) {
-                break;
-            }
-
-            ValueCard card = cards.get(index);
-            int y = startY + i * 14;
-            drawScaledString(trimToScaledWidth(card.title, 47), startX, y, 0xFFFFD98E);
-            drawScaledString(trimToScaledWidth(card.value, 76), startX + 50, y, 0xFF9FD8FF);
-            if (!card.description.isEmpty()) {
-                drawScaledString(trimToScaledWidth(card.description, 120), startX, y + 7, 0xFFAFA696);
-            }
+        String layout = NetworkTerminalClientState.getValueDisplayLayout();
+        int y = startY;
+        int visibleCount = 0;
+        int visibleEnd = valueScrollOffset;
+        for (int index = valueScrollOffset; index < cards.size() && y < 119; index++) {
+            DisplayCard card = cards.get(index);
+            int height = getCardHeight(card, layout);
+            drawDisplayCard(card, layout, startX, y, width, height);
+            y += height + getCardGap(layout);
+            visibleCount++;
+            visibleEnd = index + 1;
         }
 
-        if (cards.size() > maxRows) {
+        if (visibleEnd < cards.size() || valueScrollOffset > 0) {
             drawScaledString(
-                I18n.format("gui.mmcenetworks.terminal.scroll", valueScrollOffset + 1, cards.size() - maxRows + 1),
-                86,
+                I18n.format("gui.mmcenetworks.terminal.scroll", valueScrollOffset + 1, Math.max(1, cards.size() - visibleCount + 1)),
+                startX + 2,
                 126,
                 0xFF9E9487
             );
         }
     }
 
+    private void drawDisplayCard(final DisplayCard card, final String layout, final int x, final int y, final int width, final int height) {
+        if ("dashboard".equals(layout) || "machine".equals(layout)) {
+            drawRect(x - 1, y - 1, x + width + 1, y + height, 0x26000000);
+        }
+
+        if ("text".equals(card.type) || "story".equals(layout)) {
+            drawTextCard(card, x, y, width);
+            return;
+        }
+        if ("bar".equals(card.type)) {
+            drawBarCard(card, x, y, width);
+            return;
+        }
+        if ("status".equals(card.type)) {
+            drawStatusCard(card, x, y, width);
+            return;
+        }
+        drawValueCard(card, x, y, width);
+    }
+
+    private void drawValueCard(final DisplayCard card, final int x, final int y, final int width) {
+        int titleWidth = sidebarExpanded ? 47 : 68;
+        int valueX = x + titleWidth + 3;
+        int valueWidth = Math.max(30, x + width - valueX);
+        drawScaledString(trimToScaledWidth(card.title, titleWidth), x, y, 0xFFFFD98E);
+        drawScaledString(trimToScaledWidth(card.value, valueWidth), valueX, y, 0xFF9FD8FF);
+        if (!card.description.isEmpty()) {
+            drawScaledString(trimToScaledWidth(card.description, width), x, y + 7, 0xFFAFA696);
+        }
+    }
+
+    private void drawTextCard(final DisplayCard card, final int x, final int y, final int width) {
+        drawScaledString(trimToScaledWidth(card.title, width), x, y, 0xFFFFD98E);
+        drawScaledString(trimToScaledWidth(card.description.isEmpty() ? card.value : card.description, width), x, y + 8, 0xFFD7CCBB);
+    }
+
+    private void drawBarCard(final DisplayCard card, final int x, final int y, final int width) {
+        double max = readCardMax(card);
+        double ratio = max <= 0.0D ? 0.0D : clampDouble(card.number / max, 0.0D, 1.0D);
+        int barY = y + 9;
+        int fillWidth = (int) Math.round((width - 2) * ratio);
+        drawScaledString(trimToScaledWidth(card.title + "  " + card.value, width), x, y, 0xFFFFD98E);
+        drawRect(x, barY, x + width, barY + 5, 0x66000000);
+        drawRect(x + 1, barY + 1, x + 1 + fillWidth, barY + 4, 0xFF8FE2A8);
+    }
+
+    private void drawStatusCard(final DisplayCard card, final int x, final int y, final int width) {
+        boolean active = readCardStatus(card);
+        int color = active ? 0xFF8FE2A8 : 0xFFE08B78;
+        String status = active ? optionOrDefault(card.options, "true", card.value) : optionOrDefault(card.options, "false", card.value);
+        drawRect(x, y + 2, x + 5, y + 7, color);
+        drawScaledString(trimToScaledWidth(card.title, 58), x + 8, y, 0xFFFFD98E);
+        drawScaledString(trimToScaledWidth(status, Math.max(20, width - 66)), x + 66, y, color);
+    }
+
     private void drawColorPanel() {
         if (colorPanelNetworkId.isEmpty()) {
             return;
         }
+        float previousZLevel = zLevel;
+        GlStateManager.pushMatrix();
+        GlStateManager.disableDepth();
+        GlStateManager.translate(0.0F, 0.0F, 300.0F);
+        zLevel = 300.0F;
         drawTexture(COLOR_PANEL, colorPanelX, colorPanelY, COLOR_PANEL_WIDTH, COLOR_PANEL_HEIGHT);
+        zLevel = previousZLevel;
+        GlStateManager.enableDepth();
+        GlStateManager.popMatrix();
     }
 
     private void drawAtlasIcon(
@@ -509,9 +610,9 @@ public class GuiNetworkTerminal extends GuiScreen {
         NetworkTerminalClientState.requestRefresh();
     }
 
-    private List<ValueCard> collectValueCards() {
+    private List<DisplayCard> collectDisplayCards() {
         NBTTagCompound sharedData = NetworkTerminalClientState.getSharedData();
-        List<ValueCard> cards = new ArrayList<>();
+        List<DisplayCard> cards = new ArrayList<>();
         List<ValueDisplaySpec> specs = NetworkTerminalClientState.getValueDisplaySpecs();
         if (!specs.isEmpty()) {
             for (ValueDisplaySpec spec : specs) {
@@ -524,7 +625,14 @@ public class GuiNetworkTerminal extends GuiScreen {
                     .replace("{name}", spec.getDisplayName())
                     .replace("{key}", spec.getKey())
                     .replace("{value}", rawValue);
-                cards.add(new ValueCard(spec.getDisplayName(), rawValue, description));
+                cards.add(new DisplayCard(
+                    spec.getDisplayName(),
+                    rawValue,
+                    description,
+                    spec.getCardType(),
+                    parseOptions(spec.getOptions()),
+                    readDouble(sharedData.getTag(spec.getKey()), 0.0D)
+                ));
             }
             if (!cards.isEmpty()) {
                 return cards;
@@ -537,7 +645,14 @@ public class GuiNetworkTerminal extends GuiScreen {
         keys.sort(Comparator.naturalOrder());
         for (String key : keys) {
             String rawValue = formatTagValue(sharedData.getTag(key));
-            cards.add(new ValueCard(key, rawValue, I18n.format("gui.mmcenetworks.terminal.values.raw_description", rawValue)));
+            cards.add(new DisplayCard(
+                key,
+                rawValue,
+                I18n.format("gui.mmcenetworks.terminal.values.raw_description", rawValue),
+                "value",
+                new HashMap<>(),
+                readDouble(sharedData.getTag(key), 0.0D)
+            ));
         }
         return cards;
     }
@@ -585,10 +700,98 @@ public class GuiNetworkTerminal extends GuiScreen {
         return tag.toString();
     }
 
+    private Map<String, String> parseOptions(final String options) {
+        Map<String, String> result = new HashMap<>();
+        if (options == null || options.trim().isEmpty()) {
+            return result;
+        }
+        String[] entries = options.split(";");
+        for (String entry : entries) {
+            int split = entry.indexOf('=');
+            if (split <= 0) {
+                continue;
+            }
+            String key = entry.substring(0, split).trim().toLowerCase(Locale.ROOT);
+            String value = entry.substring(split + 1).trim();
+            if (!key.isEmpty()) {
+                result.put(key, value);
+            }
+        }
+        return result;
+    }
+
+    private double readCardMax(final DisplayCard card) {
+        String max = card.options.get("max");
+        if (max == null || max.isEmpty()) {
+            return 100.0D;
+        }
+        try {
+            return Double.parseDouble(max);
+        } catch (NumberFormatException ignored) {
+            return 100.0D;
+        }
+    }
+
+    private boolean readCardStatus(final DisplayCard card) {
+        String value = card.value == null ? "" : card.value.trim().toLowerCase(Locale.ROOT);
+        return "true".equals(value) || "yes".equals(value) || "on".equals(value) || "1".equals(value) || card.number > 0.0D;
+    }
+
+    private String optionOrDefault(final Map<String, String> options, final String key, final String fallback) {
+        String value = options.get(key);
+        return value == null || value.isEmpty() ? fallback : value;
+    }
+
+    private double readDouble(final NBTBase tag, final double fallback) {
+        if (tag instanceof NBTTagInt) {
+            return ((NBTTagInt) tag).getInt();
+        }
+        if (tag instanceof NBTTagLong) {
+            return ((NBTTagLong) tag).getLong();
+        }
+        if (tag instanceof NBTTagDouble) {
+            return ((NBTTagDouble) tag).getDouble();
+        }
+        if (tag instanceof NBTTagByte) {
+            return ((NBTTagByte) tag).getByte();
+        }
+        if (tag instanceof NBTTagString) {
+            try {
+                return Double.parseDouble(((NBTTagString) tag).getString());
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
+
+    private int getCardHeight(final DisplayCard card, final String layout) {
+        if ("text".equals(card.type) || "story".equals(layout)) {
+            return 18;
+        }
+        if ("bar".equals(card.type)) {
+            return 15;
+        }
+        return "dashboard".equals(layout) || "machine".equals(layout) ? 12 : 14;
+    }
+
+    private int getCardGap(final String layout) {
+        return "dashboard".equals(layout) || "machine".equals(layout) ? 3 : 0;
+    }
+
     private int getNetworkRowAt(final int mouseX, final int mouseY) {
         int x = getNetworkListX();
         int y = getNetworkListY();
         if (!isInside(mouseX, mouseY, x, y, getNetworkListWidth(), getNetworkListHeight())) {
+            return -1;
+        }
+        if (sidebarExpanded) {
+            for (int row = 0; row < getNetworkRowCount(); row++) {
+                int rowY = getNetworkRowY(row);
+                if (mouseY >= rowY && mouseY < rowY + getNetworkRowHeight(row)) {
+                    return row;
+                }
+            }
             return -1;
         }
         int stride = sidebarExpanded ? EXPANDED_ROW_HEIGHT + EXPANDED_ROW_GAP : COMPACT_ROW_HEIGHT + COMPACT_ROW_GAP;
@@ -647,8 +850,8 @@ public class GuiNetworkTerminal extends GuiScreen {
     }
 
     private void clampScroll() {
-        networkScrollOffset = clamp(networkScrollOffset, 0, Math.max(0, getNetworks().size() - NETWORK_ROW_COUNT));
-        valueScrollOffset = clamp(valueScrollOffset, 0, Math.max(0, collectValueCards().size() - 5));
+        networkScrollOffset = clamp(networkScrollOffset, 0, Math.max(0, getNetworks().size() - getNetworkRowCount()));
+        valueScrollOffset = clamp(valueScrollOffset, 0, Math.max(0, collectDisplayCards().size() - 5));
     }
 
     private int getPanelLeft() {
@@ -657,6 +860,34 @@ public class GuiNetworkTerminal extends GuiScreen {
 
     private int getPanelTop() {
         return (height - scale(PANEL_HEIGHT)) / 2;
+    }
+
+    private void updateRenameFieldBounds() {
+        if (renameField == null) {
+            return;
+        }
+        int localX = getContentLeft() + RENAME_FIELD_OFFSET_X;
+        int localWidth = Math.max(20, getRenameSaveX() - localX - 3);
+        renameField.x = getPanelLeft() + scale(localX);
+        renameField.y = getPanelTop() + scale(RENAME_FIELD_Y);
+        renameField.width = scale(localWidth);
+        renameField.height = scale(12);
+    }
+
+    private int getContentLeft() {
+        return sidebarExpanded ? CONTENT_EXPANDED_LEFT : CONTENT_COMPACT_LEFT;
+    }
+
+    private int getContentRight() {
+        return CONTENT_RIGHT;
+    }
+
+    private int getRenameSaveX() {
+        return getContentRight() - RENAME_SAVE_WIDTH;
+    }
+
+    private int getRefreshX() {
+        return getContentRight() - REFRESH_WIDTH - 1;
     }
 
     private void drawTexture(final ResourceLocation texture, final int x, final int y, final int width, final int height) {
@@ -671,6 +902,15 @@ public class GuiNetworkTerminal extends GuiScreen {
         GlStateManager.scale(textScale, textScale, 1.0D);
         fontRenderer.drawString(text, (float) (x / textScale), (float) (y / textScale), color, false);
         GlStateManager.popMatrix();
+    }
+
+    private void drawCenteredScaledString(final String text, final int left, final int right, final int y, final int color) {
+        int x = left + Math.max(0, right - left - getScaledStringWidth(text)) / 2;
+        drawScaledString(text, x, y, color);
+    }
+
+    private int getScaledStringWidth(final String text) {
+        return (int) Math.ceil(fontRenderer.getStringWidth(text) * clampTextScale());
     }
 
     private String trimToScaledWidth(final String text, final int width) {
@@ -698,6 +938,10 @@ public class GuiNetworkTerminal extends GuiScreen {
     }
 
     private static int clamp(final int value, final int min, final int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static double clampDouble(final double value, final double min, final double max) {
         return Math.max(min, Math.min(max, value));
     }
 
@@ -739,21 +983,40 @@ public class GuiNetworkTerminal extends GuiScreen {
 
     private int getNetworkListHeight() {
         if (sidebarExpanded) {
-            return NETWORK_ROW_COUNT * EXPANDED_ROW_HEIGHT + Math.max(0, NETWORK_ROW_COUNT - 1) * EXPANDED_ROW_GAP;
+            return EXPANDED_NETWORK_HEIGHT;
         }
-        return NETWORK_ROW_COUNT * COMPACT_ROW_HEIGHT + Math.max(0, NETWORK_ROW_COUNT - 1) * COMPACT_ROW_GAP;
+        return getNetworkRowCount() * COMPACT_ROW_HEIGHT + Math.max(0, getNetworkRowCount() - 1) * COMPACT_ROW_GAP;
+    }
+
+    private int getNetworkRowCount() {
+        return sidebarExpanded ? EXPANDED_NETWORK_ROW_COUNT : COMPACT_NETWORK_ROW_COUNT;
     }
 
     private int getNetworkRowY(final int row) {
         if (sidebarExpanded) {
-            return EXPANDED_NETWORK_Y + row * (EXPANDED_ROW_HEIGHT + EXPANDED_ROW_GAP);
+            return EXPANDED_NETWORK_Y + row * EXPANDED_NETWORK_HEIGHT / EXPANDED_NETWORK_ROW_COUNT;
         }
         return COMPACT_NETWORK_Y + row * (COMPACT_ROW_HEIGHT + COMPACT_ROW_GAP);
+    }
+
+    private int getNetworkRowHeight(final int row) {
+        if (sidebarExpanded) {
+            return getNetworkRowY(row + 1) - getNetworkRowY(row);
+        }
+        return COMPACT_ROW_HEIGHT;
     }
 
     private int tintNetworkColor(final int color, final boolean selected, final boolean hovered) {
         int alpha = selected ? 0xFF : hovered ? 0xEE : 0xDD;
         return (alpha << 24) | (color & 0x00FFFFFF);
+    }
+
+    private int tintButtonStripColor(final int color) {
+        int alpha = (color >>> 24) & 0xFF;
+        int red = Math.min(255, (((color >>> 16) & 0xFF) * 3 + 255) / 4);
+        int green = Math.min(255, (((color >>> 8) & 0xFF) * 3 + 255) / 4);
+        int blue = Math.min(255, ((color & 0xFF) * 3 + 255) / 4);
+        return (alpha << 24) | (red << 16) | (green << 8) | blue;
     }
 
     private int getPaletteIndex(final int color) {
@@ -778,15 +1041,28 @@ public class GuiNetworkTerminal extends GuiScreen {
         return new ResourceLocation(MMCENetworksMod.MOD_ID, "textures/gui/network_terminal/" + name);
     }
 
-    private static final class ValueCard {
+    private static final class DisplayCard {
         private final String title;
         private final String value;
         private final String description;
+        private final String type;
+        private final Map<String, String> options;
+        private final double number;
 
-        private ValueCard(final String title, final String value, final String description) {
+        private DisplayCard(
+            final String title,
+            final String value,
+            final String description,
+            final String type,
+            final Map<String, String> options,
+            final double number
+        ) {
             this.title = title;
             this.value = value;
             this.description = description;
+            this.type = type == null || type.isEmpty() ? "value" : type;
+            this.options = options == null ? new HashMap<>() : options;
+            this.number = number;
         }
     }
 

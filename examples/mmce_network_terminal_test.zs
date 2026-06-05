@@ -14,6 +14,17 @@ val consumerMachine = "networks-B";
 val basicFlag = "testTechBasicUnlocked";
 val advancedFlag = "testTechAdvancedUnlocked";
 
+// 终端卡片式显示配置。
+// 这些是全局显示规则：打开任意网络终端时，会按这些规则读取当前网络里的同名 key。
+Networks.clearTerminalValueDisplays();
+Networks.setTerminalDisplayLayout("machine");
+Networks.registerTerminalBar("testScore", "测试分数", "{value} / 100", 100);
+Networks.registerTerminalStatus("networkOnline", "网络状态", "在线", "离线");
+Networks.registerTerminalText("testMode", "当前模式", "{value}");
+Networks.registerTerminalValue("testOwner", "写入来源", "{value}");
+Networks.registerTerminalStatus(basicFlag, "基础科技", "已解锁", "未解锁");
+Networks.registerTerminalStatus(advancedFlag, "高级科技", "已解锁", "未解锁");
+
 function requireNetwork(event as RecipeCheckEvent) as bool {
     if (!Networks.hasNetwork(event.controller)) {
         event.setFailed("machine has no network");

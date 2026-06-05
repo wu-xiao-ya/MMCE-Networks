@@ -30,6 +30,7 @@ public final class ClientNetworkMessageHandlers {
                 networkId,
                 sharedData,
                 NetworkValueDisplayRegistry.fromNbt(valueDisplayConfig),
+                NetworkValueDisplayRegistry.layoutFromNbt(valueDisplayConfig),
                 NetworkTerminalClientState.readNetworkSummaries(networkListData)
             )
         );

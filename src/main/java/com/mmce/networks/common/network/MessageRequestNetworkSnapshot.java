@@ -3,6 +3,7 @@ package com.mmce.networks.common.network;
 import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.data.MMCENetworkSavedData.NetworkRef;
+import com.mmce.networks.common.data.NetworkAccess;
 import com.mmce.networks.common.data.NetworkValueDisplayRegistry;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.nbt.NBTTagCompound;
@@ -44,9 +45,12 @@ public class MessageRequestNetworkSnapshot implements IMessage {
         }
 
         private static void sendSnapshot(final EntityPlayerMP player, final String networkId) {
-            NBTTagCompound sharedData = networkId == null || networkId.isEmpty()
-                ? new NBTTagCompound()
-                : MMCENetworkApi.getSharedData(player.getServerWorld(), networkId);
+            MMCENetworkSavedData savedData = MMCENetworkSavedData.get(player.world);
+            int dimension = player.world.provider.getDimension();
+            boolean canAccess = networkId != null
+                && !networkId.isEmpty()
+                && NetworkAccess.canAccess(player, savedData, dimension, networkId);
+            NBTTagCompound sharedData = canAccess ? MMCENetworkApi.getSharedData(player.getServerWorld(), networkId) : new NBTTagCompound();
             NBTTagCompound networkListData = buildNetworkListData(player);
             NetworkHandler.CHANNEL.sendTo(
                 new MessageSyncNetworkSnapshot(networkId, sharedData, NetworkValueDisplayRegistry.toNbt(), networkListData),
@@ -64,6 +68,9 @@ public class MessageRequestNetworkSnapshot implements IMessage {
             List<NetworkRef> refs = savedData.getNetworkKeys(player.world.provider.getDimension());
             NBTTagList entries = new NBTTagList();
             for (NetworkRef ref : refs) {
+                if (!NetworkAccess.canAccess(player, ref)) {
+                    continue;
+                }
                 NBTTagCompound entry = new NBTTagCompound();
                 entry.setString("id", ref.getNetworkId());
                 entry.setString("displayName", ref.getDisplayName());

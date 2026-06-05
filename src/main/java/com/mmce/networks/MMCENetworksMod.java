@@ -17,7 +17,8 @@ import java.lang.reflect.Method;
     name = MMCENetworksMod.MOD_NAME,
     version = MMCENetworksMod.VERSION,
     acceptedMinecraftVersions = "[1.12.2]",
-    dependencies = "after:modularmachinery"
+    dependencies = "after:modularmachinery",
+    guiFactory = "com.mmce.networks.client.gui.MMCENetworksGuiFactory"
 )
 public class MMCENetworksMod {
     public static final String MOD_ID = "mmcenetworks";

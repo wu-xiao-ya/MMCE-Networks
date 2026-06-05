@@ -577,6 +577,11 @@ public final class Networks {
     }
 
     @ZenMethod
+    public static void setTerminalDisplayLayout(final String layout) {
+        NetworkValueDisplayRegistry.setLayout(layout);
+    }
+
+    @ZenMethod
     public static void registerTerminalValue(final String key, final String displayName) {
         registerTerminalValue(key, displayName, "{value}");
     }
@@ -584,6 +589,26 @@ public final class Networks {
     @ZenMethod
     public static void registerTerminalValue(final String key, final String displayName, final String template) {
         NetworkValueDisplayRegistry.register(key, displayName, template);
+    }
+
+    @ZenMethod
+    public static void registerTerminalCard(final String key, final String displayName, final String template, final String cardType, final String options) {
+        NetworkValueDisplayRegistry.register(key, displayName, template, cardType, options);
+    }
+
+    @ZenMethod
+    public static void registerTerminalText(final String key, final String displayName, final String template) {
+        NetworkValueDisplayRegistry.register(key, displayName, template, "text", "");
+    }
+
+    @ZenMethod
+    public static void registerTerminalBar(final String key, final String displayName, final String template, final double max) {
+        NetworkValueDisplayRegistry.register(key, displayName, template, "bar", "max=" + max);
+    }
+
+    @ZenMethod
+    public static void registerTerminalStatus(final String key, final String displayName, final String trueText, final String falseText) {
+        NetworkValueDisplayRegistry.register(key, displayName, "{value}", "status", "true=" + trueText + ";false=" + falseText);
     }
 
     @ZenMethod

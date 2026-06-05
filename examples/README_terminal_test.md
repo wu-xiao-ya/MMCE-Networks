@@ -26,3 +26,35 @@
    放入 `钻石`，执行 `network_test_require_advanced`，需要 `tech_advanced` 已解锁，成功后产出 `绿宝石`。
 
 如果只是想看终端三页有无内容，这套脚本已经够用，不需要额外复杂配方。
+
+## 卡片式终端显示
+
+`mmce_network_terminal_test.zs` 顶部已经注册了一组卡片式终端规则：
+
+```zenscript
+Networks.clearTerminalValueDisplays();
+Networks.setTerminalDisplayLayout("machine");
+Networks.registerTerminalBar("testScore", "测试分数", "{value} / 100", 100);
+Networks.registerTerminalStatus("networkOnline", "网络状态", "在线", "离线");
+Networks.registerTerminalText("testMode", "当前模式", "{value}");
+Networks.registerTerminalValue("testOwner", "写入来源", "{value}");
+```
+
+这些注册是全局显示规则，不是单独创建网络。实际显示内容来自当前打开网络里的共享数据。
+
+也就是说：
+1. 游戏内用网络绑定器创建/绑定网络。
+2. 配方运行时用 `Networks.setInt/setString/setBoolean` 写入数据。
+3. 打开终端后，GUI 会读取当前网络的同名 key，并按卡片规则显示。
+
+可用布局：
+- `list`：普通列表。
+- `dashboard`：卡片之间留间距，适合少量核心指标。
+- `story`：偏文本说明。
+- `machine`：带轻微卡片底色，适合机器面板。
+
+可用卡片：
+- `registerTerminalValue(key, name, template)`：普通键值。
+- `registerTerminalText(key, name, template)`：说明文本。
+- `registerTerminalBar(key, name, template, max)`：进度条。
+- `registerTerminalStatus(key, name, trueText, falseText)`：状态灯。

@@ -14,9 +14,11 @@ public final class MMCENetworksConfig {
     public static int dirtyNetworkSyncIntervalTicks = 2;
     public static boolean enableSyncProfiling = false;
     public static int profilingLogIntervalTicks = 200;
+    public static boolean enableFtbTeamAccess = true;
     public static double terminalTextScale = 0.65D;
 
     private static File configFile;
+    private static Configuration configuration;
     private static long lastLoadedTimestamp = -1L;
     private static long lastReloadCheckAt;
 
@@ -25,8 +27,8 @@ public final class MMCENetworksConfig {
 
     public static void load(final File file) {
         configFile = file;
-        lastLoadedTimestamp = file == null || !file.exists() ? -1L : file.lastModified();
         Configuration config = new Configuration(file);
+        configuration = config;
         try {
             config.load();
             fallbackSyncIntervalTicks = config.getInt(
@@ -67,6 +69,12 @@ public final class MMCENetworksConfig {
                 20 * 300,
                 "How often to emit profiling logs, in ticks, when sync profiling is enabled."
             );
+            enableFtbTeamAccess = config.getBoolean(
+                "enableFtbTeamAccess",
+                CATEGORY_GENERAL,
+                true,
+                "Allow players to access MMCE Networks owned by FTB Utilities teammates. Requires ftbutilities and ftblib; safely ignored when they are not installed."
+            );
             terminalTextScale = config.getFloat(
                 "terminalTextScale",
                 CATEGORY_CLIENT,
@@ -80,6 +88,24 @@ public final class MMCENetworksConfig {
                 config.save();
             }
             lastLoadedTimestamp = file == null || !file.exists() ? -1L : file.lastModified();
+        }
+    }
+
+    public static Configuration getConfiguration() {
+        if (configuration == null) {
+            configuration = new Configuration(configFile);
+            configuration.load();
+        }
+        return configuration;
+    }
+
+    public static void saveAndReload() {
+        Configuration config = getConfiguration();
+        if (config.hasChanged()) {
+            config.save();
+        }
+        if (configFile != null) {
+            load(configFile);
         }
     }
 

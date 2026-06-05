@@ -1,6 +1,8 @@
 package com.mmce.networks.common.network;
 
 import com.mmce.networks.api.MMCENetworkApi;
+import com.mmce.networks.common.data.MMCENetworkSavedData;
+import com.mmce.networks.common.data.NetworkAccess;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.network.ByteBufUtils;
@@ -44,7 +46,11 @@ public class MessageUpdateNetworkStyle implements IMessage {
                 if (message.networkId == null || message.networkId.isEmpty()) {
                     return;
                 }
-                MMCENetworkApi.registerNetwork(player.world, message.networkId);
+                MMCENetworkSavedData savedData = MMCENetworkSavedData.get(player.world);
+                if (!NetworkAccess.canAccess(player, savedData, player.world.provider.getDimension(), message.networkId)) {
+                    return;
+                }
+                MMCENetworkApi.registerNetwork(player.world, message.networkId, player.getUniqueID());
                 MMCENetworkApi.setNetworkColor(player.world, message.networkId, message.color);
                 MMCENetworkApi.setNetworkPinned(player.world, message.networkId, message.pinned);
             });

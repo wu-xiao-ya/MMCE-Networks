@@ -16,6 +16,7 @@ public final class NetworkTerminalClientState {
     private static String activeNetworkId = "";
     private static NBTTagCompound sharedData = new NBTTagCompound();
     private static List<ValueDisplaySpec> valueDisplaySpecs = new ArrayList<>();
+    private static String valueDisplayLayout = "list";
     private static List<NetworkSummary> availableNetworks = new ArrayList<>();
     private static long lastUpdatedAt = -1L;
     private static int stateRevision;
@@ -43,6 +44,7 @@ public final class NetworkTerminalClientState {
         final String networkId,
         @Nullable final NBTTagCompound data,
         @Nullable final List<ValueDisplaySpec> specs,
+        @Nullable final String layout,
         @Nullable final List<NetworkSummary> networks
     ) {
         if (networkId == null || !networkId.equals(activeNetworkId)) {
@@ -50,6 +52,7 @@ public final class NetworkTerminalClientState {
         }
         sharedData = data == null ? new NBTTagCompound() : data.copy();
         valueDisplaySpecs = specs == null ? new ArrayList<>() : new ArrayList<>(specs);
+        valueDisplayLayout = layout == null || layout.isEmpty() ? "list" : layout;
         availableNetworks = networks == null ? new ArrayList<>() : new ArrayList<>(networks);
         lastUpdatedAt = System.currentTimeMillis();
         loading = false;
@@ -77,6 +80,10 @@ public final class NetworkTerminalClientState {
 
     public static List<ValueDisplaySpec> getValueDisplaySpecs() {
         return new ArrayList<>(valueDisplaySpecs);
+    }
+
+    public static String getValueDisplayLayout() {
+        return valueDisplayLayout;
     }
 
     public static List<NetworkSummary> getAvailableNetworks() {

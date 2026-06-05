@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -26,6 +27,7 @@ public class MMCENetworkSavedData extends WorldSavedData {
     private final Map<NetworkKey, NBTTagCompound> networks = new HashMap<>();
     private final Map<NetworkKey, String> networkDisplayNames = new HashMap<>();
     private final Map<NetworkKey, Integer> networkColors = new HashMap<>();
+    private final Map<NetworkKey, UUID> networkOwners = new HashMap<>();
     private final Set<NetworkKey> pinnedNetworks = new HashSet<>();
     private final Map<NetworkPoolKey, NetworkResourcePool.ResourcePoolTotals> resourcePoolTotalsCache = new HashMap<>();
     private final Map<ControllerKey, ControllerSnapshot> controllerSnapshots = new HashMap<>();
@@ -169,8 +171,16 @@ public class MMCENetworkSavedData extends WorldSavedData {
     }
 
     public void registerNetwork(final int dimension, final String networkId) {
+        registerNetwork(dimension, networkId, null);
+    }
+
+    public void registerNetwork(final int dimension, final String networkId, @Nullable final UUID owner) {
         NetworkKey key = new NetworkKey(dimension, networkId);
+        boolean existed = networks.containsKey(key);
         networks.computeIfAbsent(key, ignored -> new NBTTagCompound());
+        if (!existed && owner != null) {
+            networkOwners.put(key, owner);
+        }
         ensureDisplayName(key);
         markDirty();
     }
@@ -180,6 +190,7 @@ public class MMCENetworkSavedData extends WorldSavedData {
         if (networks.remove(key) != null) {
             networkDisplayNames.remove(key);
             networkColors.remove(key);
+            networkOwners.remove(key);
             pinnedNetworks.remove(key);
             invalidateAllResourcePoolTotals(dimension, networkId);
             markDirty();
@@ -190,7 +201,7 @@ public class MMCENetworkSavedData extends WorldSavedData {
         List<NetworkRef> refs = new ArrayList<>();
         for (NetworkKey key : networks.keySet()) {
             if (key.dimension == dimension) {
-                refs.add(new NetworkRef(key.dimension, key.networkId, ensureDisplayName(key), ensureColor(key), pinnedNetworks.contains(key)));
+                refs.add(new NetworkRef(key.dimension, key.networkId, ensureDisplayName(key), ensureColor(key), pinnedNetworks.contains(key), networkOwners.get(key)));
             }
         }
         refs.sort((left, right) -> {
@@ -200,6 +211,15 @@ public class MMCENetworkSavedData extends WorldSavedData {
             return left.displayName.compareToIgnoreCase(right.displayName);
         });
         return refs;
+    }
+
+    @Nullable
+    public UUID getNetworkOwner(final int dimension, final String networkId) {
+        return networkOwners.get(new NetworkKey(dimension, networkId));
+    }
+
+    public boolean isNetworkPublic(final int dimension, final String networkId) {
+        return !networkOwners.containsKey(new NetworkKey(dimension, networkId));
     }
 
     public String getNetworkDisplayName(final int dimension, final String networkId) {
@@ -289,6 +309,7 @@ public class MMCENetworkSavedData extends WorldSavedData {
         networks.clear();
         networkDisplayNames.clear();
         networkColors.clear();
+        networkOwners.clear();
         pinnedNetworks.clear();
         resourcePoolTotalsCache.clear();
         controllerSnapshots.clear();
@@ -337,6 +358,18 @@ public class MMCENetworkSavedData extends WorldSavedData {
                 continue;
             }
             pinnedNetworks.add(new NetworkKey(entry.getInteger("dimension"), entry.getString("networkId")));
+        }
+
+        NBTTagList ownerList = nbt.getTagList("networkOwners", Constants.NBT.TAG_COMPOUND);
+        for (int i = 0; i < ownerList.tagCount(); i++) {
+            NBTTagCompound entry = ownerList.getCompoundTagAt(i);
+            if (!entry.hasKey("networkId", Constants.NBT.TAG_STRING) || !entry.hasUniqueId("owner")) {
+                continue;
+            }
+            networkOwners.put(
+                new NetworkKey(entry.getInteger("dimension"), entry.getString("networkId")),
+                entry.getUniqueId("owner")
+            );
         }
 
         NBTTagList snapshotList = nbt.getTagList("controllerSnapshots", Constants.NBT.TAG_COMPOUND);
@@ -401,6 +434,16 @@ public class MMCENetworkSavedData extends WorldSavedData {
             pinnedList.appendTag(tag);
         }
         compound.setTag("pinnedNetworks", pinnedList);
+
+        NBTTagList ownerList = new NBTTagList();
+        for (Map.Entry<NetworkKey, UUID> entry : networkOwners.entrySet()) {
+            NBTTagCompound tag = new NBTTagCompound();
+            tag.setInteger("dimension", entry.getKey().dimension);
+            tag.setString("networkId", entry.getKey().networkId);
+            tag.setUniqueId("owner", entry.getValue());
+            ownerList.appendTag(tag);
+        }
+        compound.setTag("networkOwners", ownerList);
 
         compound.setInteger("nextNetworkDisplayIndex", Math.max(1, nextNetworkDisplayIndex));
 
@@ -523,13 +566,16 @@ public class MMCENetworkSavedData extends WorldSavedData {
         private final String displayName;
         private final int color;
         private final boolean pinned;
+        @Nullable
+        private final UUID owner;
 
-        public NetworkRef(final int dimension, final String networkId, final String displayName, final int color, final boolean pinned) {
+        public NetworkRef(final int dimension, final String networkId, final String displayName, final int color, final boolean pinned, @Nullable final UUID owner) {
             this.dimension = dimension;
             this.networkId = networkId;
             this.displayName = displayName;
             this.color = color;
             this.pinned = pinned;
+            this.owner = owner;
         }
 
         public int getDimension() {
@@ -550,6 +596,11 @@ public class MMCENetworkSavedData extends WorldSavedData {
 
         public boolean isPinned() {
             return pinned;
+        }
+
+        @Nullable
+        public UUID getOwner() {
+            return owner;
         }
     }
 

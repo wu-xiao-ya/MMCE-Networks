@@ -9,6 +9,9 @@ import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.world.World;
 
+import javax.annotation.Nullable;
+import java.util.UUID;
+
 public final class MMCENetworkApi {
     private MMCENetworkApi() {
     }
@@ -27,8 +30,12 @@ public final class MMCENetworkApi {
     }
 
     public static void registerNetwork(final World world, final String networkId) {
+        registerNetwork(world, networkId, null);
+    }
+
+    public static void registerNetwork(final World world, final String networkId, @Nullable final UUID owner) {
         int dimension = world.provider.getDimension();
-        MMCENetworkSavedData.get(world).registerNetwork(dimension, networkId);
+        MMCENetworkSavedData.get(world).registerNetwork(dimension, networkId, owner);
         ControllerNetworkSyncHandler.markNetworkDirty(world, networkId);
     }
 
