@@ -205,4 +205,6 @@ Networks.setString(event.controller, "hint", "反应堆运行稳定");
 
 ## 许可证
 
-当前仓库尚未提供明确许可证文件。若需要在整合包、二次开发或公开分发中使用，请先联系作者确认授权范围。
+代码部分使用 MIT License，见 [`LICENSE`](LICENSE)。
+
+材质、模型、GUI 美术、图标、粒子等非代码素材不包含在 MIT 授权内，使用、修改、转载或移植前需要获得额外授权。详见 [`ASSETS_LICENSE.md`](ASSETS_LICENSE.md)。
