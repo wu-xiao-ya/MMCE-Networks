@@ -88,6 +88,38 @@ public final class ComputeCableNetworkService {
         return result;
     }
 
+    public static List<TileComputeEndpoint> getPhysicalComponentEndpoints(
+        final World world,
+        final BlockPos start
+    ) {
+        List<TileComputeEndpoint> result = new ArrayList<>();
+        if (world == null || world.isRemote || start == null || !isPhysicalTraversable(world, start)) {
+            return result;
+        }
+
+        int maxVisited = Math.max(64, MMCENetworksConfig.computeCableMaxVisitedNodes);
+        Deque<BlockPos> queue = new ArrayDeque<>();
+        Set<Long> visited = new HashSet<>();
+        queue.add(start.toImmutable());
+        visited.add(start.toLong());
+
+        while (!queue.isEmpty() && visited.size() <= maxVisited) {
+            BlockPos current = queue.removeFirst();
+            TileEntity tile = world.getTileEntity(current);
+            if (tile instanceof TileComputeEndpoint && !tile.isInvalid()) {
+                result.add((TileComputeEndpoint) tile);
+            }
+            for (EnumFacing facing : EnumFacing.VALUES) {
+                BlockPos next = current.offset(facing);
+                if (!visited.add(next.toLong()) || !isPhysicalTraversable(world, next)) {
+                    continue;
+                }
+                queue.addLast(next.toImmutable());
+            }
+        }
+        return result;
+    }
+
     public static void markGraphDirty(final World world) {
         if (world == null || world.isRemote) {
             return;
@@ -150,9 +182,16 @@ public final class ComputeCableNetworkService {
                     continue;
                 }
                 for (BlockPos distributor : distributors) {
-                    if (isConnected(world, networkId, computeInterface, distributor)
-                        && anyConnected(world, networkId, distributor, matrices)) {
-                        return ValidationResult.VALID;
+                    for (BlockPos matrix : matrices) {
+                        if (isConnectedThroughDistributor(
+                            world,
+                            networkId,
+                            computeInterface,
+                            distributor,
+                            matrix
+                        )) {
+                            return ValidationResult.VALID;
+                        }
                     }
                 }
             }
@@ -214,9 +253,16 @@ public final class ComputeCableNetworkService {
                 continue;
             }
             for (BlockPos distributor : distributors) {
-                if (isConnected(world, networkId, computeInterface, distributor)
-                    && anyConnected(world, networkId, distributor, matrices)) {
-                    return ValidationResult.VALID;
+                for (BlockPos matrix : matrices) {
+                    if (isConnectedThroughDistributor(
+                        world,
+                        networkId,
+                        computeInterface,
+                        distributor,
+                        matrix
+                    )) {
+                        return ValidationResult.VALID;
+                    }
                 }
             }
         }
@@ -256,12 +302,43 @@ public final class ComputeCableNetworkService {
         return connected;
     }
 
+    private static boolean isConnectedThroughDistributor(
+        final World world,
+        final String networkId,
+        final BlockPos start,
+        final BlockPos distributor,
+        final BlockPos target
+    ) {
+        if (start == null || distributor == null || target == null
+            || start.equals(distributor) || distributor.equals(target)) {
+            return false;
+        }
+        if (!isConnected(world, networkId, start, distributor)
+            || !isConnected(world, networkId, distributor, target)) {
+            return false;
+        }
+        return !search(world, networkId, start, target, distributor);
+    }
+
     private static boolean search(
         final World world,
         final String networkId,
         final BlockPos start,
         final BlockPos target
     ) {
+        return search(world, networkId, start, target, null);
+    }
+
+    private static boolean search(
+        final World world,
+        final String networkId,
+        final BlockPos start,
+        final BlockPos target,
+        @Nullable final BlockPos blocked
+    ) {
+        if (blocked != null && (blocked.equals(start) || blocked.equals(target))) {
+            return false;
+        }
         if (!isTraversable(world, networkId, start) || !isTraversable(world, networkId, target)) {
             return false;
         }
@@ -275,7 +352,7 @@ public final class ComputeCableNetworkService {
             BlockPos current = queue.removeFirst();
             for (EnumFacing facing : EnumFacing.VALUES) {
                 BlockPos next = current.offset(facing);
-                if (!visited.add(next.toLong())) {
+                if ((blocked != null && blocked.equals(next)) || !visited.add(next.toLong())) {
                     continue;
                 }
                 if (!isTraversable(world, networkId, next)) {
@@ -308,6 +385,17 @@ public final class ComputeCableNetworkService {
         TileEntity tile = world.getTileEntity(pos);
         return tile instanceof TileComputeEndpoint
             && networkId.equals(((TileComputeEndpoint) tile).getNetworkId());
+    }
+
+    private static boolean isPhysicalTraversable(
+        final World world,
+        final BlockPos pos
+    ) {
+        if (!world.isBlockLoaded(pos)) {
+            return false;
+        }
+        Block block = world.getBlockState(pos).getBlock();
+        return block instanceof BlockComputeCable || block instanceof BlockComputeEndpoint;
     }
 
     private static boolean anyConnected(

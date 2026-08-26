@@ -5,6 +5,7 @@ import com.mmce.networks.common.compute.transport.ComputeCableNetworkService;
 import com.mmce.networks.common.compute.transport.ComputeEndpointAutoBindingService;
 import com.mmce.networks.common.compute.transport.ComputeEndpointAutoBindingService.DiagnosticResult;
 import com.mmce.networks.common.compute.transport.ComputeEndpointType;
+import com.mmce.networks.common.compute.transport.ComputeNetworkAttachmentService;
 import com.mmce.networks.common.item.ItemComputeBinder;
 import com.mmce.networks.common.tile.TileComputeEndpoint;
 import net.minecraft.block.Block;
@@ -79,6 +80,9 @@ public class BlockComputeEndpoint extends Block implements ITileEntityProvider {
             return false;
         }
         ComputeEndpointAutoBindingService.synchronizeNow(worldIn);
+        if (ComputeNetworkAttachmentService.synchronizeNow(worldIn) > 0) {
+            ComputeEndpointAutoBindingService.synchronizeNow(worldIn);
+        }
         TileComputeEndpoint endpoint = (TileComputeEndpoint) tile;
         String text;
         if (endpoint.isBound()) {

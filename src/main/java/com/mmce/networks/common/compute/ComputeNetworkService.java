@@ -206,11 +206,22 @@ public final class ComputeNetworkService {
         return mutateTopology(world, networkId, data -> {
             NBTTagCompound root = getRoot(data, true);
             NBTTagCompound routes = getCompound(root, ROUTES_TAG, true);
+            NBTTagCompound interfaces = getCompound(root, INTERFACES_TAG, false);
+            NBTTagCompound line = interfaces == null
+                ? null
+                : getCompound(interfaces, normalize(interfaceId), false);
+            if (line == null
+                || line.getBoolean(WIRELESS_TAG) != CONNECTION_WIRELESS.equals(normalizedType)) {
+                return false;
+            }
             String normalizedDistributor = normalize(distributorId);
             NBTTagCompound distributors = getCompound(root, DISTRIBUTORS_TAG, false);
             NBTTagCompound distributor = distributors == null
                 ? null
                 : getCompound(distributors, normalizedDistributor, false);
+            if (!normalizedDistributor.isEmpty() && distributor == null) {
+                return false;
+            }
             int bindingLimit = distributor == null
                 ? 0
                 : Math.max(0, distributor.getInteger(BINDING_LIMIT_TAG));
@@ -263,6 +274,26 @@ public final class ComputeNetworkService {
         return resolveRoute(
             world, networkId, Topology.read(getNetworkData(world, networkId)), nodeId, nodePos
         ).status.id;
+    }
+
+    public static Map<BlockPos, Integer> getWirelessInterfaceCoverage(
+        final World world,
+        final String networkId
+    ) {
+        Map<BlockPos, Integer> result = new HashMap<>();
+        if (!validWorld(world) || empty(networkId)) {
+            return result;
+        }
+        Topology topology = readTopology(world, networkId);
+        int dimension = world.provider.getDimension();
+        for (InterfaceConfig config : topology.interfaces.values()) {
+            if (!config.wireless || config.coverage <= 0 || config.anchor == null
+                || config.anchor.dimension != dimension) {
+                continue;
+            }
+            result.merge(config.anchor.position, config.coverage, Math::max);
+        }
+        return result;
     }
 
     public static boolean reportNode(

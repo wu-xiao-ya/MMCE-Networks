@@ -9,6 +9,7 @@ import com.mmce.networks.common.mmce.MmceReflection;
 import com.mmce.networks.common.compute.ComputeNetworkService;
 import com.mmce.networks.common.compute.transport.ComputeCableNetworkService;
 import com.mmce.networks.common.compute.transport.ComputeEndpointAutoBindingService;
+import com.mmce.networks.common.compute.transport.ComputeNetworkAttachmentService;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.tileentity.TileEntity;
@@ -51,6 +52,7 @@ public class ControllerNetworkSyncHandler {
         long worldTick = event.world.getTotalWorldTime();
         TransientSupplyScheduler.process(event.world, dimension);
         ComputeEndpointAutoBindingService.synchronize(event.world);
+        ComputeNetworkAttachmentService.synchronize(event.world);
         ComputeNetworkService.settle(event.world);
         if (!reflection.isAvailable()) {
             return;
