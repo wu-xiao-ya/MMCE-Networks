@@ -73,8 +73,20 @@ public class ItemComputeBinder extends Item {
         if (tile instanceof TileComputeEndpoint) {
             TileComputeEndpoint endpoint = (TileComputeEndpoint) tile;
             if (PlayerCompat.isSneaking(player)) {
+                if (endpoint.isAutomaticBinding()) {
+                    send(player, TextFormatting.GOLD + "结构内算力端点由当前 MMCE 控制器自动管理。");
+                    return EnumActionResult.SUCCESS;
+                }
                 endpoint.clearBinding();
                 send(player, TextFormatting.GOLD + "已解除算力端点绑定。");
+                return EnumActionResult.SUCCESS;
+            }
+            if (endpoint.isAutomaticBinding()) {
+                send(
+                    player,
+                    TextFormatting.GREEN + "该端点已由 MMCE 结构自动绑定到控制器 "
+                        + TextFormatting.AQUA + endpoint.getControllerPos()
+                );
                 return EnumActionResult.SUCCESS;
             }
             return bindEndpoint(player, world, stack, endpoint);
@@ -208,8 +220,8 @@ public class ItemComputeBinder extends Item {
                     + BlockPos.fromLong(tag.getLong(CONTROLLER_POSITION_TAG))
             );
         }
-        tooltip.add(TextFormatting.YELLOW + "右键控制器记录，右键端点绑定");
-        tooltip.add(TextFormatting.GOLD + "潜行右键端点解除绑定");
+        tooltip.add(TextFormatting.YELLOW + "用于结构外端点或调试绑定");
+        tooltip.add(TextFormatting.GRAY + "结构内端点会自动绑定当前控制器");
     }
 
     private static NBTTagCompound getOrCreateTag(final ItemStack stack) {

@@ -78,7 +78,8 @@ public class BlockComputeEndpoint extends Block implements ITileEntityProvider {
         }
         TileComputeEndpoint endpoint = (TileComputeEndpoint) tile;
         String text = endpoint.isBound()
-            ? "端点已绑定：网络 " + endpoint.getNetworkId()
+            ? (endpoint.isAutomaticBinding() ? "端点已自动绑定：网络 " : "端点已手动绑定：网络 ")
+                + endpoint.getNetworkId()
                 + "，控制器 " + endpoint.getControllerPos()
             : "端点尚未绑定控制器。";
         playerIn.sendMessage(new TextComponentString(text));

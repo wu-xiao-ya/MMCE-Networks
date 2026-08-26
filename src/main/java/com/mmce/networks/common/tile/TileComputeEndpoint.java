@@ -18,10 +18,12 @@ public class TileComputeEndpoint extends TileEntity {
     private static final String NETWORK_ID_TAG = "networkId";
     private static final String CONTROLLER_DIMENSION_TAG = "controllerDimension";
     private static final String CONTROLLER_POSITION_TAG = "controllerPosition";
+    private static final String AUTOMATIC_BINDING_TAG = "automaticBinding";
 
     private String networkId = "";
     private int controllerDimension;
     private BlockPos controllerPos = BlockPos.ORIGIN;
+    private boolean automaticBinding;
 
     public boolean isBound() {
         return !networkId.isEmpty();
@@ -37,6 +39,10 @@ public class TileComputeEndpoint extends TileEntity {
 
     public BlockPos getControllerPos() {
         return controllerPos;
+    }
+
+    public boolean isAutomaticBinding() {
+        return automaticBinding;
     }
 
     @Nullable
@@ -67,22 +73,51 @@ public class TileComputeEndpoint extends TileEntity {
         final int newControllerDimension,
         final BlockPos newControllerPos
     ) {
+        bindInternal(newNetworkId, newControllerDimension, newControllerPos, false);
+    }
+
+    public void bindAutomatically(
+        final String newNetworkId,
+        final int newControllerDimension,
+        final BlockPos newControllerPos
+    ) {
+        bindInternal(newNetworkId, newControllerDimension, newControllerPos, true);
+    }
+
+    private void bindInternal(
+        final String newNetworkId,
+        final int newControllerDimension,
+        final BlockPos newControllerPos,
+        final boolean automatic
+    ) {
         if (world != null && !world.isRemote) {
             ComputeCableNetworkService.unregisterEndpoint(this);
         }
         networkId = newNetworkId == null ? "" : newNetworkId.trim();
         controllerDimension = newControllerDimension;
         controllerPos = newControllerPos == null ? BlockPos.ORIGIN : newControllerPos.toImmutable();
+        automaticBinding = automatic;
         bindingChanged();
     }
 
     public void clearBinding() {
+        clearBindingInternal();
+    }
+
+    public void clearAutomaticBinding() {
+        if (automaticBinding) {
+            clearBindingInternal();
+        }
+    }
+
+    private void clearBindingInternal() {
         if (world != null && !world.isRemote) {
             ComputeCableNetworkService.unregisterEndpoint(this);
         }
         networkId = "";
         controllerDimension = 0;
         controllerPos = BlockPos.ORIGIN;
+        automaticBinding = false;
         bindingChanged();
     }
 
@@ -127,6 +162,7 @@ public class TileComputeEndpoint extends TileEntity {
         compound.setString(NETWORK_ID_TAG, networkId);
         compound.setInteger(CONTROLLER_DIMENSION_TAG, controllerDimension);
         compound.setLong(CONTROLLER_POSITION_TAG, controllerPos.toLong());
+        compound.setBoolean(AUTOMATIC_BINDING_TAG, automaticBinding);
         return compound;
     }
 
@@ -140,6 +176,7 @@ public class TileComputeEndpoint extends TileEntity {
         controllerPos = compound.hasKey(CONTROLLER_POSITION_TAG, Constants.NBT.TAG_LONG)
             ? BlockPos.fromLong(compound.getLong(CONTROLLER_POSITION_TAG))
             : BlockPos.ORIGIN;
+        automaticBinding = compound.getBoolean(AUTOMATIC_BINDING_TAG);
     }
 
     @Override

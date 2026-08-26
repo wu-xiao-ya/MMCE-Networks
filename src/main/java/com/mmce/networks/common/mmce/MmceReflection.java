@@ -2,10 +2,14 @@ package com.mmce.networks.common.mmce;
 
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.common.util.Constants;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 public class MmceReflection {
     private static final String CONTROLLER_TILE_CLASS = "hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController";
@@ -18,18 +22,24 @@ public class MmceReflection {
     private final Method getCustomDataTagMethod;
     private final Method setCustomDataTagMethod;
     private final Method markForUpdateSyncMethod;
+    private final Method isStructureFormedMethod;
+    private final Method getFoundPatternMethod;
 
     public MmceReflection() {
         Class<?> tileClass = null;
         Method getMethod = null;
         Method setMethod = null;
         Method syncMethod = null;
+        Method formedMethod = null;
+        Method patternMethod = null;
 
         try {
             tileClass = Class.forName(CONTROLLER_TILE_CLASS);
             getMethod = tileClass.getMethod("getCustomDataTag");
             setMethod = tileClass.getMethod("setCustomDataTag", NBTTagCompound.class);
             syncMethod = tileClass.getMethod("markForUpdateSync");
+            formedMethod = tileClass.getMethod("isStructureFormed");
+            patternMethod = tileClass.getMethod("getFoundPattern");
         } catch (ClassNotFoundException | NoSuchMethodException ignored) {
         }
 
@@ -37,6 +47,8 @@ public class MmceReflection {
         this.getCustomDataTagMethod = getMethod;
         this.setCustomDataTagMethod = setMethod;
         this.markForUpdateSyncMethod = syncMethod;
+        this.isStructureFormedMethod = formedMethod;
+        this.getFoundPatternMethod = patternMethod;
     }
 
     public boolean isAvailable() {
@@ -46,8 +58,40 @@ public class MmceReflection {
             && markForUpdateSyncMethod != null;
     }
 
+    public boolean isAutoBindingAvailable() {
+        return isAvailable()
+            && isStructureFormedMethod != null
+            && getFoundPatternMethod != null;
+    }
+
     public boolean isControllerTile(final TileEntity tile) {
         return tile != null && controllerTileClass != null && controllerTileClass.isInstance(tile);
+    }
+
+    public boolean isStructureFormed(final TileEntity tile) {
+        Object result = invoke(isStructureFormedMethod, tile);
+        return result instanceof Boolean && (Boolean) result;
+    }
+
+    public Set<BlockPos> getFoundPatternPositions(final TileEntity tile) {
+        Set<BlockPos> result = new HashSet<>();
+        Object pattern = invoke(getFoundPatternMethod, tile);
+        if (pattern == null) {
+            return result;
+        }
+        try {
+            Method getPatternMethod = pattern.getClass().getMethod("getPattern");
+            Object rawPattern = getPatternMethod.invoke(pattern);
+            if (rawPattern instanceof Map) {
+                for (Object key : ((Map<?, ?>) rawPattern).keySet()) {
+                    if (key instanceof BlockPos) {
+                        result.add((BlockPos) key);
+                    }
+                }
+            }
+        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException ignored) {
+        }
+        return result;
     }
 
     public String getBoundNetworkId(final TileEntity tile) {

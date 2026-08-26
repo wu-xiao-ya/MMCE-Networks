@@ -61,6 +61,33 @@ public final class ComputeCableNetworkService {
         }
     }
 
+    public static List<TileComputeEndpoint> getRegisteredEndpoints(final World world) {
+        List<TileComputeEndpoint> result = new ArrayList<>();
+        if (world == null || world.isRemote) {
+            return result;
+        }
+
+        int dimension = world.provider.getDimension();
+        List<Long> positions;
+        synchronized (LOCK) {
+            Set<Long> indexed = ENDPOINTS.get(dimension);
+            positions = indexed == null
+                ? java.util.Collections.emptyList()
+                : new ArrayList<>(indexed);
+        }
+        for (Long position : positions) {
+            BlockPos endpointPos = BlockPos.fromLong(position.longValue());
+            if (!world.isBlockLoaded(endpointPos)) {
+                continue;
+            }
+            TileEntity tile = world.getTileEntity(endpointPos);
+            if (tile instanceof TileComputeEndpoint && !tile.isInvalid()) {
+                result.add((TileComputeEndpoint) tile);
+            }
+        }
+        return result;
+    }
+
     public static void markGraphDirty(final World world) {
         if (world == null || world.isRemote) {
             return;
@@ -347,6 +374,7 @@ public final class ComputeCableNetworkService {
         }
         TileEntity controller = world.getTileEntity(controllerPos);
         return MMCE.isControllerTile(controller)
+            && MMCE.isStructureFormed(controller)
             && networkId.equals(MMCE.getBoundNetworkId(controller));
     }
 
