@@ -24,10 +24,17 @@ public final class ComputeEndpointAutoBindingService {
     }
 
     public static void synchronize(final World world) {
-        if (world == null || world.isRemote || !MMCE.isAutoBindingAvailable()) {
+        if (world == null || world.isRemote) {
             return;
         }
         if (world.getTotalWorldTime() % SYNC_INTERVAL_TICKS != 0L) {
+            return;
+        }
+        synchronizeNow(world);
+    }
+
+    public static void synchronizeNow(final World world) {
+        if (world == null || world.isRemote || !MMCE.isAutoBindingAvailable()) {
             return;
         }
 
@@ -38,10 +45,11 @@ public final class ComputeEndpointAutoBindingService {
             if (!MMCE.isControllerTile(tile)) {
                 continue;
             }
-            String networkId = MMCE.getBoundNetworkId(tile);
-            if (networkId == null || networkId.trim().isEmpty() || !MMCE.isStructureFormed(tile)) {
+            if (!MMCE.isStructureFormed(tile)) {
                 continue;
             }
+            String networkId = MMCE.getBoundNetworkId(tile);
+            final String normalizedNetworkId = networkId == null ? "" : networkId.trim();
 
             Set<BlockPos> endpointPositions = MMCE.getFoundPatternPositions(tile);
             for (BlockPos relative : endpointPositions) {
@@ -54,8 +62,8 @@ public final class ComputeEndpointAutoBindingService {
                 claims.compute(
                     endpointPos.toLong(),
                     (ignored, existing) -> existing == null
-                        ? new BindingClaim(networkId, dimension, tile.getPos())
-                        : existing.merge(networkId, dimension, tile.getPos())
+                        ? new BindingClaim(normalizedNetworkId, dimension, tile.getPos())
+                        : existing.merge(normalizedNetworkId, dimension, tile.getPos())
                 );
             }
         }
@@ -86,6 +94,51 @@ public final class ComputeEndpointAutoBindingService {
                 endpoint.clearAutomaticBinding();
             }
         }
+    }
+
+    public static DiagnosticResult diagnose(
+        final World world,
+        final BlockPos endpointPos
+    ) {
+        if (world == null || world.isRemote) {
+            return DiagnosticResult.INVALID_WORLD;
+        }
+        if (!MMCE.isAutoBindingAvailable()) {
+            return DiagnosticResult.MMCE_API_UNAVAILABLE;
+        }
+
+        int matches = 0;
+        boolean foundFormedController = false;
+        for (TileEntity tile : new java.util.ArrayList<>(world.loadedTileEntityList)) {
+            if (!MMCE.isControllerTile(tile) || !MMCE.isStructureFormed(tile)) {
+                continue;
+            }
+            foundFormedController = true;
+            for (BlockPos relative : MMCE.getFoundPatternPositions(tile)) {
+                if (tile.getPos().add(relative).equals(endpointPos)) {
+                    matches++;
+                    break;
+                }
+            }
+        }
+        if (matches == 1) {
+            return DiagnosticResult.MATCHED;
+        }
+        if (matches > 1) {
+            return DiagnosticResult.AMBIGUOUS;
+        }
+        return foundFormedController
+            ? DiagnosticResult.NOT_IN_FORMED_PATTERN
+            : DiagnosticResult.NO_FORMED_CONTROLLER;
+    }
+
+    public enum DiagnosticResult {
+        MATCHED,
+        INVALID_WORLD,
+        MMCE_API_UNAVAILABLE,
+        NO_FORMED_CONTROLLER,
+        NOT_IN_FORMED_PATTERN,
+        AMBIGUOUS
     }
 
     private static final class BindingClaim {

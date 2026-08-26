@@ -18,14 +18,20 @@ public class TileComputeEndpoint extends TileEntity {
     private static final String NETWORK_ID_TAG = "networkId";
     private static final String CONTROLLER_DIMENSION_TAG = "controllerDimension";
     private static final String CONTROLLER_POSITION_TAG = "controllerPosition";
+    private static final String CONTROLLER_BOUND_TAG = "controllerBound";
     private static final String AUTOMATIC_BINDING_TAG = "automaticBinding";
 
     private String networkId = "";
     private int controllerDimension;
     private BlockPos controllerPos = BlockPos.ORIGIN;
+    private boolean controllerBound;
     private boolean automaticBinding;
 
     public boolean isBound() {
+        return controllerBound;
+    }
+
+    public boolean hasNetwork() {
         return !networkId.isEmpty();
     }
 
@@ -96,6 +102,7 @@ public class TileComputeEndpoint extends TileEntity {
         networkId = newNetworkId == null ? "" : newNetworkId.trim();
         controllerDimension = newControllerDimension;
         controllerPos = newControllerPos == null ? BlockPos.ORIGIN : newControllerPos.toImmutable();
+        controllerBound = newControllerPos != null;
         automaticBinding = automatic;
         bindingChanged();
     }
@@ -117,6 +124,7 @@ public class TileComputeEndpoint extends TileEntity {
         networkId = "";
         controllerDimension = 0;
         controllerPos = BlockPos.ORIGIN;
+        controllerBound = false;
         automaticBinding = false;
         bindingChanged();
     }
@@ -170,6 +178,7 @@ public class TileComputeEndpoint extends TileEntity {
         compound.setString(NETWORK_ID_TAG, networkId);
         compound.setInteger(CONTROLLER_DIMENSION_TAG, controllerDimension);
         compound.setLong(CONTROLLER_POSITION_TAG, controllerPos.toLong());
+        compound.setBoolean(CONTROLLER_BOUND_TAG, controllerBound);
         compound.setBoolean(AUTOMATIC_BINDING_TAG, automaticBinding);
         return compound;
     }
@@ -184,6 +193,9 @@ public class TileComputeEndpoint extends TileEntity {
         controllerPos = compound.hasKey(CONTROLLER_POSITION_TAG, Constants.NBT.TAG_LONG)
             ? BlockPos.fromLong(compound.getLong(CONTROLLER_POSITION_TAG))
             : BlockPos.ORIGIN;
+        controllerBound = compound.hasKey(CONTROLLER_BOUND_TAG, Constants.NBT.TAG_BYTE)
+            ? compound.getBoolean(CONTROLLER_BOUND_TAG)
+            : !networkId.isEmpty();
         automaticBinding = compound.getBoolean(AUTOMATIC_BINDING_TAG);
     }
 
