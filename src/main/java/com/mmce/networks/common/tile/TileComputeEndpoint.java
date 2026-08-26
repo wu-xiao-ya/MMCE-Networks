@@ -141,6 +141,14 @@ public class TileComputeEndpoint extends TileEntity {
     }
 
     @Override
+    public void validate() {
+        super.validate();
+        if (world != null && !world.isRemote) {
+            ComputeCableNetworkService.registerEndpoint(this);
+        }
+    }
+
+    @Override
     public void invalidate() {
         if (world != null && !world.isRemote) {
             ComputeCableNetworkService.unregisterEndpoint(this);

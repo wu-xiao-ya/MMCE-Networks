@@ -7,6 +7,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -32,6 +33,7 @@ public final class ComputeEndpointAutoBindingService {
 
         int dimension = world.provider.getDimension();
         Map<Long, BindingClaim> claims = new HashMap<>();
+        Map<Long, TileComputeEndpoint> claimedEndpoints = new HashMap<>();
         for (TileEntity tile : new java.util.ArrayList<>(world.loadedTileEntityList)) {
             if (!MMCE.isControllerTile(tile)) {
                 continue;
@@ -48,6 +50,7 @@ public final class ComputeEndpointAutoBindingService {
                 if (!(endpointTile instanceof TileComputeEndpoint)) {
                     continue;
                 }
+                claimedEndpoints.put(endpointPos.toLong(), (TileComputeEndpoint) endpointTile);
                 claims.compute(
                     endpointPos.toLong(),
                     (ignored, existing) -> existing == null
@@ -57,9 +60,15 @@ public final class ComputeEndpointAutoBindingService {
             }
         }
 
-        for (TileComputeEndpoint endpoint : ComputeCableNetworkService.getRegisteredEndpoints(world)) {
-            BindingClaim claim = claims.get(endpoint.getPos().toLong());
-            if (claim == null || claim.ambiguous) {
+        Set<Long> claimedPositions = new HashSet<>();
+        for (Map.Entry<Long, BindingClaim> entry : claims.entrySet()) {
+            TileComputeEndpoint endpoint = claimedEndpoints.get(entry.getKey());
+            if (endpoint == null) {
+                continue;
+            }
+            claimedPositions.add(entry.getKey());
+            BindingClaim claim = entry.getValue();
+            if (claim.ambiguous) {
                 if (endpoint.isAutomaticBinding()) {
                     endpoint.clearAutomaticBinding();
                 }
@@ -68,6 +77,13 @@ public final class ComputeEndpointAutoBindingService {
             if (!endpoint.isAutomaticBinding()
                 || !endpoint.matchesBinding(claim.networkId, claim.dimension, claim.controllerPos)) {
                 endpoint.bindAutomatically(claim.networkId, claim.dimension, claim.controllerPos);
+            }
+        }
+
+        for (TileComputeEndpoint endpoint : ComputeCableNetworkService.getRegisteredEndpoints(world)) {
+            if (endpoint.isAutomaticBinding()
+                && !claimedPositions.contains(endpoint.getPos().toLong())) {
+                endpoint.clearAutomaticBinding();
             }
         }
     }
