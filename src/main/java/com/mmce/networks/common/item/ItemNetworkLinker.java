@@ -4,6 +4,7 @@ import com.mmce.networks.MMCENetworksMod;
 import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.data.NetworkAccess;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
+import com.mmce.networks.common.compute.ComputeNetworkService;
 import com.mmce.networks.common.mmce.MmceReflection;
 import com.mmce.networks.common.network.MessageOpenNetworkTerminal;
 import com.mmce.networks.common.network.NetworkHandler;
@@ -183,6 +184,14 @@ public class ItemNetworkLinker extends Item {
             sendLinkerMessage(player, world, new TextComponentString(TextFormatting.RED + "你没有权限访问这个网络"), false);
             return EnumActionResult.SUCCESS;
         }
+        String previousNetworkId = reflection.getBoundNetworkId(tile);
+        if (!isNullOrEmpty(previousNetworkId) && !previousNetworkId.equals(networkId)) {
+            ComputeNetworkService.unbindRoute(
+                world,
+                previousNetworkId,
+                dimension + ":" + pos.toLong()
+            );
+        }
         data.registerNetwork(dimension, networkId, player.getUniqueID());
         NBTTagCompound sharedData = data.getNetworkData(dimension, networkId);
         reflection.setSharedData(tile, networkId, sharedData);
@@ -286,6 +295,11 @@ public class ItemNetworkLinker extends Item {
             }
         }
 
+        ComputeNetworkService.unbindRoute(
+            world,
+            boundNetworkId,
+            world.provider.getDimension() + ":" + pos
+        );
         reflection.clearSharedData(tile);
         reflection.markForUpdateSync(tile);
         MMCENetworkSavedData.get(world).removeControllerSnapshot(world.provider.getDimension(), pos);

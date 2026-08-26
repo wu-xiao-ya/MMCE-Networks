@@ -1,0 +1,48 @@
+{
+  "registryname": "mmcen_demo_fabricator",
+  "localizedname": "§d网络科技制造机（演示）",
+  "requires-blueprint": false,
+  "color": "7CE37C",
+  "parts": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "elements": [
+        "modularmachinery:mmcen_demo_fabricator_factory_controller@2"
+      ]
+    },
+    {
+      "x": -1,
+      "y": 0,
+      "z": 0,
+      "elements": [
+        "modularmachinery:blockinputbus"
+      ]
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "z": 0,
+      "elements": [
+        "modularmachinery:blockoutputbus"
+      ]
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 1,
+      "elements": [
+        "modularmachinery:blockcasing@0"
+      ]
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "elements": [
+        "modularmachinery:blockcasing@0"
+      ]
+    }
+  ]
+}

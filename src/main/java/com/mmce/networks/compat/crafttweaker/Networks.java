@@ -4,6 +4,7 @@ import com.mmce.networks.common.data.NetworkResourcePool;
 import com.mmce.networks.common.data.NetworkTechTree;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.data.NetworkValueDisplayRegistry;
+import com.mmce.networks.common.compute.ComputeNetworkService;
 import com.mmce.networks.common.handler.ControllerNetworkSyncHandler;
 import com.mmce.networks.common.config.MMCENetworksConfig;
 import com.mmce.networks.common.handler.TransientSupplyScheduler;
@@ -67,7 +68,8 @@ public final class Networks {
     public static boolean contains(final IMachineController controller, final String key) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return false;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData != null && clientData.hasKey(key);
         }
 
         synchronized (context.getSavedData()) {
@@ -114,7 +116,8 @@ public final class Networks {
     public static int getInt(final IMachineController controller, final String key, final int defaultValue) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return defaultValue;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData == null ? defaultValue : readInt(clientData, key, defaultValue);
         }
 
         synchronized (context.getSavedData()) {
@@ -126,7 +129,8 @@ public final class Networks {
     public static long getLong(final IMachineController controller, final String key, final long defaultValue) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return defaultValue;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData == null ? defaultValue : readLong(clientData, key, defaultValue);
         }
 
         synchronized (context.getSavedData()) {
@@ -138,7 +142,8 @@ public final class Networks {
     public static double getDouble(final IMachineController controller, final String key, final double defaultValue) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return defaultValue;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData == null ? defaultValue : readDouble(clientData, key, defaultValue);
         }
 
         synchronized (context.getSavedData()) {
@@ -150,7 +155,8 @@ public final class Networks {
     public static boolean getBoolean(final IMachineController controller, final String key, final boolean defaultValue) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return defaultValue;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData == null ? defaultValue : readBoolean(clientData, key, defaultValue);
         }
 
         synchronized (context.getSavedData()) {
@@ -163,7 +169,8 @@ public final class Networks {
     public static String getString(final IMachineController controller, final String key, @Nullable final String defaultValue) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return defaultValue;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData == null ? defaultValue : readString(clientData, key, defaultValue);
         }
 
         synchronized (context.getSavedData()) {
@@ -295,12 +302,12 @@ public final class Networks {
     }
 
     @ZenMethod
-    public static long setSupply(final IMachineController controller, final String key, final int amount) {
+    public static long setSupply(final IMachineController controller, final String key, final long amount) {
         return setSupply(controller, key, null, amount);
     }
 
     @ZenMethod
-    public static long setSupply(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+    public static long setSupply(final IMachineController controller, final String key, @Nullable final String source, final long amount) {
         NetworkContext context = getContext(controller);
         if (context == null) {
             return 0L;
@@ -326,12 +333,12 @@ public final class Networks {
     }
 
     @ZenMethod
-    public static long pulseSupply(final IMachineController controller, final String key, final int amount) {
+    public static long pulseSupply(final IMachineController controller, final String key, final long amount) {
         return pulseSupply(controller, key, null, amount);
     }
 
     @ZenMethod
-    public static long pulseSupply(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+    public static long pulseSupply(final IMachineController controller, final String key, @Nullable final String source, final long amount) {
         NetworkContext context = getContext(controller);
         if (context == null) {
             return 0L;
@@ -352,7 +359,7 @@ public final class Networks {
     }
 
     @ZenMethod
-    public static long pulseThreadSupply(final FactoryRecipeEvent event, final String key, final int amount) {
+    public static long pulseThreadSupply(final FactoryRecipeEvent event, final String key, final long amount) {
         if (event == null || event.getFactoryRecipeThread() == null) {
             return 0L;
         }
@@ -365,12 +372,12 @@ public final class Networks {
     }
 
     @ZenMethod
-    public static boolean trySetUsage(final IMachineController controller, final String key, final int amount) {
+    public static boolean trySetUsage(final IMachineController controller, final String key, final long amount) {
         return trySetUsage(controller, key, null, amount);
     }
 
     @ZenMethod
-    public static boolean trySetUsage(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+    public static boolean trySetUsage(final IMachineController controller, final String key, @Nullable final String source, final long amount) {
         NetworkContext context = getContext(controller);
         if (context == null) {
             return false;
@@ -390,12 +397,12 @@ public final class Networks {
     }
 
     @ZenMethod
-    public static boolean tryAddUsage(final IMachineController controller, final String key, final int amount) {
+    public static boolean tryAddUsage(final IMachineController controller, final String key, final long amount) {
         return tryAddUsage(controller, key, null, amount);
     }
 
     @ZenMethod
-    public static boolean tryAddUsage(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+    public static boolean tryAddUsage(final IMachineController controller, final String key, @Nullable final String source, final long amount) {
         NetworkContext context = getContext(controller);
         if (context == null) {
             return false;
@@ -412,12 +419,12 @@ public final class Networks {
     }
 
     @ZenMethod
-    public static long releaseUsage(final IMachineController controller, final String key, final int amount) {
+    public static long releaseUsage(final IMachineController controller, final String key, final long amount) {
         return releaseUsage(controller, key, null, amount);
     }
 
     @ZenMethod
-    public static long releaseUsage(final IMachineController controller, final String key, @Nullable final String source, final int amount) {
+    public static long releaseUsage(final IMachineController controller, final String key, @Nullable final String source, final long amount) {
         NetworkContext context = getContext(controller);
         if (context == null) {
             return 0L;
@@ -443,7 +450,7 @@ public final class Networks {
     }
 
     @ZenMethod
-    public static boolean canUse(final IMachineController controller, final String key, final int amount) {
+    public static boolean canUse(final IMachineController controller, final String key, final long amount) {
         if (amount < 0) {
             return false;
         }
@@ -499,7 +506,8 @@ public final class Networks {
     public static boolean hasTech(final IMachineController controller, final String techId) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return false;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData != null && NetworkTechTree.hasDefinition(clientData, techId);
         }
 
         synchronized (context.getSavedData()) {
@@ -511,7 +519,8 @@ public final class Networks {
     public static boolean isTechUnlocked(final IMachineController controller, final String techId) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return false;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData != null && NetworkTechTree.isUnlocked(clientData, techId);
         }
 
         synchronized (context.getSavedData()) {
@@ -523,7 +532,8 @@ public final class Networks {
     public static boolean canUnlockTech(final IMachineController controller, final String techId) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return false;
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return clientData != null && NetworkTechTree.canUnlock(clientData, techId);
         }
 
         synchronized (context.getSavedData()) {
@@ -545,7 +555,10 @@ public final class Networks {
     public static IData getTechTree(final IMachineController controller) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return CraftTweakerMC.getIDataModifyable(new NBTTagCompound());
+            NBTTagCompound clientData = getClientSharedData(controller);
+            return CraftTweakerMC.getIDataModifyable(
+                clientData == null ? new NBTTagCompound() : NetworkTechTree.getTreeSnapshot(clientData)
+            );
         }
 
         synchronized (context.getSavedData()) {
@@ -557,7 +570,11 @@ public final class Networks {
     public static IData getTech(final IMachineController controller, final String techId) {
         NetworkContext context = getContext(controller);
         if (context == null) {
-            return CraftTweakerMC.getIDataModifyable(new NBTTagCompound());
+            NBTTagCompound clientData = getClientSharedData(controller);
+            NBTTagCompound snapshot = clientData == null
+                ? null
+                : NetworkTechTree.getTechSnapshot(clientData, techId);
+            return CraftTweakerMC.getIDataModifyable(snapshot == null ? new NBTTagCompound() : snapshot);
         }
 
         synchronized (context.getSavedData()) {
@@ -574,6 +591,273 @@ public final class Networks {
     @ZenMethod
     public static void clearTerminalValueDisplays() {
         NetworkValueDisplayRegistry.clear();
+    }
+
+    /**
+     * Configures the global throughput and optional machine limit of the
+     * network's compute matrix.
+     */
+    @ZenMethod
+    public static boolean configureComputeMatrix(
+        final IMachineController controller,
+        final long throughput,
+        final int machineLimit
+    ) {
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.configureMatrix(
+            context.world, context.networkId, context.tile.getPos(), throughput, machineLimit
+        );
+    }
+
+    @ZenMethod
+    public static boolean configureComputeInterface(
+        final IMachineController controller,
+        final String interfaceId,
+        final long throughput,
+        final int machineLimit,
+        final int coverage,
+        final boolean wireless
+    ) {
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.configureInterface(
+            context.world,
+            context.networkId,
+            interfaceId,
+            context.tile.getPos(),
+            throughput,
+            machineLimit,
+            coverage,
+            wireless
+        );
+    }
+
+    @ZenMethod
+    public static boolean removeComputeInterface(
+        final IMachineController controller,
+        final String interfaceId
+    ) {
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.removeInterface(
+            context.world, context.networkId, interfaceId
+        );
+    }
+
+    @ZenMethod
+    public static boolean configureComputeDistributor(
+        final IMachineController controller,
+        final String distributorId,
+        final long throughput,
+        final int machineLimit,
+        final int bindingLimit,
+        final int coverage
+    ) {
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.configureDistributor(
+            context.world,
+            context.networkId,
+            distributorId,
+            context.tile.getPos(),
+            throughput,
+            machineLimit,
+            bindingLimit,
+            coverage
+        );
+    }
+
+    @ZenMethod
+    public static boolean removeComputeDistributor(
+        final IMachineController controller,
+        final String distributorId
+    ) {
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.removeDistributor(
+            context.world, context.networkId, distributorId
+        );
+    }
+
+    @ZenMethod
+    public static boolean bindComputeRoute(
+        final IMachineController controller,
+        final String interfaceId,
+        @Nullable final String distributorId
+    ) {
+        return bindComputeRoute(
+            controller,
+            interfaceId,
+            distributorId,
+            ComputeNetworkService.CONNECTION_WIRED
+        );
+    }
+
+    @ZenMethod
+    public static boolean bindComputeRoute(
+        final IMachineController controller,
+        final String interfaceId,
+        @Nullable final String distributorId,
+        @Nullable final String connectionType
+    ) {
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.bindRoute(
+            context.world,
+            context.networkId,
+            context.nodeId(),
+            context.tile.getPos(),
+            interfaceId,
+            distributorId,
+            connectionType
+        );
+    }
+
+    @ZenMethod
+    public static boolean unbindComputeRoute(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.unbindRoute(
+            context.world, context.networkId, context.nodeId()
+        );
+    }
+
+    @ZenMethod
+    public static boolean hasComputeRoute(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.hasRoute(
+            context.world, context.networkId, context.nodeId()
+        );
+    }
+
+    @ZenMethod
+    public static String getComputeRouteStatus(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return ComputeNetworkService.getRouteStatus(
+                context.world,
+                context.networkId,
+                context.nodeId(),
+                context.tile.getPos()
+            );
+        }
+        return getClientComputeTelemetry(controller).getString("nodeRouteStatus");
+    }
+
+    /**
+     * Reports one machine through its server-side bound route.
+     */
+    @ZenMethod
+    public static boolean reportCompute(
+        final IMachineController controller,
+        final long cpuOutput,
+        final long demand
+    ) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+        return ComputeNetworkService.reportNode(
+            context.world,
+            context.networkId,
+            context.nodeId(),
+            context.tile.getPos(),
+            cpuOutput,
+            demand
+        );
+    }
+
+    /**
+     * Legacy overload. The supplied path must match the bound route.
+     */
+    @ZenMethod
+    public static boolean reportCompute(
+        final IMachineController controller,
+        @Nullable final String interfaceId,
+        @Nullable final String distributorId,
+        final long cpuOutput,
+        final long demand
+    ) {
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+        return ComputeNetworkService.reportNode(
+            context.world,
+            context.networkId,
+            context.nodeId(),
+            interfaceId,
+            distributorId,
+            cpuOutput,
+            demand
+        );
+    }
+
+    @ZenMethod
+    public static long getComputeAllocated(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return ComputeNetworkService.getAllocated(context.world, context.networkId, context.nodeId());
+        }
+        return getClientComputeTelemetry(controller).getLong("nodeAllocated");
+    }
+
+    @ZenMethod
+    public static boolean isComputeDemandSatisfied(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return ComputeNetworkService.isDemandSatisfied(context.world, context.networkId, context.nodeId());
+        }
+        return getClientComputeTelemetry(controller).getBoolean("nodeSatisfied");
+    }
+
+    @ZenMethod
+    public static long getComputeNetworkSupply(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return ComputeNetworkService.getTotalCpuOutput(context.world, context.networkId);
+        }
+        return getClientComputeTelemetry(controller).getLong("cpuOutput");
+    }
+
+    @ZenMethod
+    public static long getComputeNetworkDemand(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return ComputeNetworkService.getTotalDemand(context.world, context.networkId);
+        }
+        return getClientComputeTelemetry(controller).getLong("demand");
+    }
+
+    @ZenMethod
+    public static long getComputeNetworkAllocated(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return ComputeNetworkService.getTotalAllocated(context.world, context.networkId);
+        }
+        return getClientComputeTelemetry(controller).getLong("allocated");
+    }
+
+    @ZenMethod
+    public static int getComputeEligibleNodes(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return ComputeNetworkService.getEligibleNodes(context.world, context.networkId);
+        }
+        return getClientComputeTelemetry(controller).getInteger("eligibleNodes");
+    }
+
+    @ZenMethod
+    public static int getComputeRejectedNodes(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        if (context != null) {
+            return ComputeNetworkService.getRejectedNodes(context.world, context.networkId);
+        }
+        return getClientComputeTelemetry(controller).getInteger("rejectedNodes");
+    }
+
+    @ZenMethod
+    public static IData getComputeSnapshot(final IMachineController controller) {
+        NetworkContext context = getContext(controller);
+        return CraftTweakerMC.getIDataModifyable(
+            context == null
+                ? new NBTTagCompound()
+                : ComputeNetworkService.getSnapshot(context.world, context.networkId)
+        );
     }
 
     @ZenMethod
@@ -704,6 +988,22 @@ public final class Networks {
         }
 
         return new NetworkContext(world, tile, networkId);
+    }
+
+    @Nullable
+    private static NBTTagCompound getClientSharedData(@Nullable final IMachineController controller) {
+        TileEntity tile = asTile(controller);
+        World world = tile == null ? null : tile.getWorld();
+        if (world == null || !world.isRemote) {
+            return null;
+        }
+        return REFLECTION.getSharedData(tile);
+    }
+
+    private static NBTTagCompound getClientComputeTelemetry(
+        @Nullable final IMachineController controller
+    ) {
+        return ComputeNetworkService.getSyncedTelemetry(getClientSharedData(controller));
     }
 
     private static boolean isNullOrEmpty(@Nullable final String value) {
@@ -1083,6 +1383,10 @@ public final class Networks {
 
         private boolean hasExistingSharedData() {
             return savedData.getExistingNetworkDataMutable(dimension, networkId) != null;
+        }
+
+        private String nodeId() {
+            return dimension + ":" + tile.getPos().toLong();
         }
 
         private MMCENetworkSavedData getSavedData() {

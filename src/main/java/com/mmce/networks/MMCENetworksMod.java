@@ -23,7 +23,7 @@ import java.lang.reflect.Method;
 public class MMCENetworksMod {
     public static final String MOD_ID = "mmcenetworks";
     public static final String MOD_NAME = "Modular Machinery: Community Edition Networks";
-    public static final String VERSION = "0.2.0";
+    public static final String VERSION = "1.0.0-beta";
     public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
 
     @Mod.EventHandler

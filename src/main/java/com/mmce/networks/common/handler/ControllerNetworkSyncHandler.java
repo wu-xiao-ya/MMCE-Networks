@@ -6,11 +6,13 @@ import com.mmce.networks.api.MMCENetworkApi;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.data.MMCENetworkSavedData.ControllerSnapshot;
 import com.mmce.networks.common.mmce.MmceReflection;
+import com.mmce.networks.common.compute.ComputeNetworkService;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.world.World;
 import net.minecraftforge.event.world.BlockEvent;
+import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
@@ -39,13 +41,17 @@ public class ControllerNetworkSyncHandler {
 
     @SubscribeEvent
     public void onWorldTick(final TickEvent.WorldTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || event.world.isRemote || !reflection.isAvailable()) {
+        if (event.phase != TickEvent.Phase.END || event.world.isRemote) {
             return;
         }
 
         int dimension = event.world.provider.getDimension();
         long worldTick = event.world.getTotalWorldTime();
         TransientSupplyScheduler.process(event.world, dimension);
+        ComputeNetworkService.settle(event.world);
+        if (!reflection.isAvailable()) {
+            return;
+        }
         Set<String> dirtyNetworkIds = consumeDirtyNetworks(dimension, worldTick);
         boolean fixedSync = shouldRunFixedSync(event.world);
         if (dirtyNetworkIds.isEmpty() && !fixedSync) {
@@ -77,6 +83,13 @@ public class ControllerNetworkSyncHandler {
     }
 
     @SubscribeEvent
+    public void onWorldUnload(final WorldEvent.Unload event) {
+        if (event.getWorld() != null && !event.getWorld().isRemote) {
+            ComputeNetworkService.clearWorld(event.getWorld().provider.getDimension());
+        }
+    }
+
+    @SubscribeEvent
     public void onBlockBreak(final BlockEvent.BreakEvent event) {
         if (event.getWorld().isRemote || !reflection.isAvailable()) {
             return;
@@ -87,6 +100,14 @@ public class ControllerNetworkSyncHandler {
             return;
         }
 
+        String networkId = reflection.getBoundNetworkId(tile);
+        if (!isNullOrEmpty(networkId)) {
+            ComputeNetworkService.unbindRoute(
+                event.getWorld(),
+                networkId,
+                event.getWorld().provider.getDimension() + ":" + event.getPos().toLong()
+            );
+        }
         MMCENetworkSavedData.get(event.getWorld()).removeControllerSnapshot(
             event.getWorld().provider.getDimension(),
             event.getPos().toLong()
@@ -121,10 +142,17 @@ public class ControllerNetworkSyncHandler {
             networkSharedDataCache.put(networkId, networkSharedData);
         }
 
-        // The network store is the single source of truth. Never write controller-local
-        // stale customData back into the network during periodic sync.
-        if (!networkSharedData.equals(controllerSharedData)) {
-            reflection.setSharedData(tile, networkId, networkSharedData);
+        // Persistent network data remains the source of truth. Runtime compute
+        // telemetry is appended only to the controller sync payload.
+        NBTTagCompound syncPayload = networkSharedData.copy();
+        ComputeNetworkService.writeSyncedTelemetry(
+            world,
+            networkId,
+            dimension + ":" + posLong,
+            syncPayload
+        );
+        if (!syncPayload.equals(controllerSharedData)) {
+            reflection.setSharedData(tile, networkId, syncPayload);
             reflection.markForUpdateSync(tile);
             data.putControllerSnapshot(dimension, posLong, networkId, networkSharedData);
             return true;
