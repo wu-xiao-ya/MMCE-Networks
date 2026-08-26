@@ -1,6 +1,8 @@
 package com.mmce.networks.common.compute;
 
 import com.mmce.networks.api.ComputeWiredRouteValidator;
+import com.mmce.networks.common.compute.transport.ComputeCableNetworkService;
+import com.mmce.networks.common.compute.transport.ComputeCableNetworkService.ValidationResult;
 import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.handler.ControllerNetworkSyncHandler;
 import net.minecraft.nbt.NBTTagCompound;
@@ -941,69 +943,100 @@ public final class ComputeNetworkService {
         if (line.wireless != routeWireless) {
             return RouteResolution.of(route, RouteStatus.CONNECTION_TYPE_MISMATCH);
         }
-        if (!routeWireless) {
-            ComputeWiredRouteValidator validator = wiredRouteValidator;
-            if (validator == null) {
-                return RouteResolution.of(route, RouteStatus.VALID);
-            }
-            if (line.anchor == null) {
-                return RouteResolution.of(route, RouteStatus.INTERFACE_ANCHOR_MISSING);
-            }
-            BlockPos distributorAnchor = distributor == null || distributor.anchor == null
-                ? null
-                : distributor.anchor.position;
-            boolean connected;
-            try {
-                connected = validator.isConnected(
-                    world,
-                    networkId,
-                    nodeId,
-                    nodePos,
-                    line.anchor.position,
-                    distributorAnchor
-                );
-            } catch (RuntimeException ignored) {
-                connected = false;
-            }
-            if (!connected) {
-                return RouteResolution.of(route, RouteStatus.WIRED_PATH_INVALID);
-            }
-            return RouteResolution.of(route, RouteStatus.VALID);
-        }
         if (line.anchor == null) {
             return RouteResolution.of(route, RouteStatus.INTERFACE_ANCHOR_MISSING);
         }
         if (line.anchor.dimension != dimension) {
             return RouteResolution.of(route, RouteStatus.DIMENSION_MISMATCH);
         }
-        if (!withinCoverage(nodePos, line.anchor.position, line.coverage)) {
-            return RouteResolution.of(route, RouteStatus.OUT_OF_RANGE);
+        if (topology.matrixAnchor == null) {
+            return RouteResolution.of(route, RouteStatus.MATRIX_ANCHOR_MISSING);
         }
-        if (distributor != null && distributor.coverage > 0) {
+        if (topology.matrixAnchor.dimension != dimension) {
+            return RouteResolution.of(route, RouteStatus.DIMENSION_MISMATCH);
+        }
+        BlockPos distributorAnchor = null;
+        if (distributor != null) {
             if (distributor.anchor == null) {
                 return RouteResolution.of(route, RouteStatus.DISTRIBUTOR_ANCHOR_MISSING);
             }
-            if (distributor.anchor.dimension != line.anchor.dimension) {
+            if (distributor.anchor.dimension != dimension) {
                 return RouteResolution.of(route, RouteStatus.DIMENSION_MISMATCH);
             }
-            if (!withinCoverage(
+            distributorAnchor = distributor.anchor.position;
+        }
+
+        ValidationResult physicalResult = routeWireless
+            ? ComputeCableNetworkService.validateWirelessRoute(
+                world,
+                networkId,
+                nodePos,
                 line.anchor.position,
-                distributor.anchor.position,
-                distributor.coverage
-            )) {
-                return RouteResolution.of(route, RouteStatus.DISTRIBUTOR_OUT_OF_RANGE);
+                distributorAnchor,
+                topology.matrixAnchor.position,
+                line.coverage
+            )
+            : ComputeCableNetworkService.validateWiredRoute(
+                world,
+                networkId,
+                nodePos,
+                line.anchor.position,
+                distributorAnchor,
+                topology.matrixAnchor.position
+            );
+        RouteStatus physicalStatus = mapPhysicalStatus(physicalResult);
+        if (physicalStatus != RouteStatus.VALID) {
+            return RouteResolution.of(route, physicalStatus);
+        }
+
+        if (!routeWireless) {
+            ComputeWiredRouteValidator validator = wiredRouteValidator;
+            if (validator != null) {
+                boolean connected;
+                try {
+                    connected = validator.isConnected(
+                        world,
+                        networkId,
+                        nodeId,
+                        nodePos,
+                        line.anchor.position,
+                        distributorAnchor,
+                        topology.matrixAnchor.position
+                    );
+                } catch (RuntimeException ignored) {
+                    connected = false;
+                }
+                if (!connected) {
+                    return RouteResolution.of(route, RouteStatus.WIRED_PATH_INVALID);
+                }
             }
         }
         return RouteResolution.of(route, RouteStatus.VALID);
     }
 
-    private static boolean withinCoverage(
-        final BlockPos source,
-        final BlockPos target,
-        final int coverage
-    ) {
-        double maxDistance = Math.max(0, coverage);
-        return source.distanceSq(target) <= maxDistance * maxDistance;
+    private static RouteStatus mapPhysicalStatus(final ValidationResult result) {
+        if (result == null) {
+            return RouteStatus.WIRED_PATH_INVALID;
+        }
+        switch (result) {
+            case VALID:
+                return RouteStatus.VALID;
+            case MACHINE_ENDPOINT_MISSING:
+                return RouteStatus.MACHINE_ENDPOINT_MISSING;
+            case INTERFACE_ENDPOINT_MISSING:
+                return RouteStatus.INTERFACE_ENDPOINT_MISSING;
+            case DISTRIBUTOR_ENDPOINT_MISSING:
+                return RouteStatus.DISTRIBUTOR_ENDPOINT_MISSING;
+            case MATRIX_ENDPOINT_MISSING:
+                return RouteStatus.MATRIX_ENDPOINT_MISSING;
+            case WIRELESS_BACKBONE_INVALID:
+                return RouteStatus.WIRELESS_BACKBONE_INVALID;
+            case OUT_OF_RANGE:
+                return RouteStatus.OUT_OF_RANGE;
+            case WIRED_PATH_INVALID:
+            default:
+                return RouteStatus.WIRED_PATH_INVALID;
+        }
     }
 
     private static boolean removeTopologyEntry(
@@ -1104,6 +1137,8 @@ public final class ComputeNetworkService {
     private static final class Topology {
         private long matrixThroughput = UNLIMITED;
         private int matrixMachineLimit;
+        @Nullable
+        private Anchor matrixAnchor;
         private final Map<String, InterfaceConfig> interfaces = new HashMap<>();
         private final Map<String, DistributorConfig> distributors = new HashMap<>();
         private final Map<String, RouteConfig> routes = new HashMap<>();
@@ -1118,6 +1153,7 @@ public final class ComputeNetworkService {
             if (matrix != null) {
                 topology.matrixThroughput = Math.max(0L, matrix.getLong(THROUGHPUT_TAG));
                 topology.matrixMachineLimit = Math.max(0, matrix.getInteger(MACHINE_LIMIT_TAG));
+                topology.matrixAnchor = Anchor.read(matrix);
             }
             NBTTagCompound interfaces = getCompound(root, INTERFACES_TAG, false);
             if (interfaces != null) {
@@ -1308,7 +1344,13 @@ public final class ComputeNetworkService {
         CONNECTION_TYPE_MISMATCH("connection_type_mismatch"),
         INTERFACE_ANCHOR_MISSING("interface_anchor_missing"),
         DISTRIBUTOR_ANCHOR_MISSING("distributor_anchor_missing"),
+        MATRIX_ANCHOR_MISSING("matrix_anchor_missing"),
+        MACHINE_ENDPOINT_MISSING("machine_endpoint_missing"),
+        INTERFACE_ENDPOINT_MISSING("interface_endpoint_missing"),
+        DISTRIBUTOR_ENDPOINT_MISSING("distributor_endpoint_missing"),
+        MATRIX_ENDPOINT_MISSING("matrix_endpoint_missing"),
         WIRED_PATH_INVALID("wired_path_invalid"),
+        WIRELESS_BACKBONE_INVALID("wireless_backbone_invalid"),
         DIMENSION_MISMATCH("dimension_mismatch"),
         OUT_OF_RANGE("out_of_range"),
         DISTRIBUTOR_OUT_OF_RANGE("distributor_out_of_range");

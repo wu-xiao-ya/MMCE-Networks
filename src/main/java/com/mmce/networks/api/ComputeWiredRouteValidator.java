@@ -6,11 +6,10 @@ import net.minecraft.world.World;
 import javax.annotation.Nullable;
 
 /**
- * Optional integration hook for a physical cable graph.
+ * Optional additional validation hook for a physical cable graph.
  *
- * <p>When no validator is registered, a persisted wired route is treated as
- * an explicit connection. An addon can register a validator to require an
- * actual cable path without changing MMCE Networks topology storage.</p>
+ * <p>MMCE Networks always validates its native cable and endpoint graph first.
+ * Integrations can register this hook to impose additional transport rules.</p>
  */
 @FunctionalInterface
 public interface ComputeWiredRouteValidator {
@@ -22,4 +21,27 @@ public interface ComputeWiredRouteValidator {
         BlockPos interfaceAnchor,
         @Nullable BlockPos distributorAnchor
     );
+
+    /**
+     * Extended hook with the matrix endpoint anchor. Existing integrations
+     * remain source and binary compatible through this default bridge.
+     */
+    default boolean isConnected(
+        final World world,
+        final String networkId,
+        final String nodeId,
+        final BlockPos nodePos,
+        final BlockPos interfaceAnchor,
+        @Nullable final BlockPos distributorAnchor,
+        final BlockPos matrixAnchor
+    ) {
+        return isConnected(
+            world,
+            networkId,
+            nodeId,
+            nodePos,
+            interfaceAnchor,
+            distributorAnchor
+        );
+    }
 }

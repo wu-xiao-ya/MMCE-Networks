@@ -1,4 +1,11 @@
 item.mmcenetworks.network_linker.name=MMCE 网络绑定器
+item.mmcenetworks.compute_binder.name=算力端点绑定器
+tile.mmcenetworks.compute_cable.name=算力线缆
+tile.mmcenetworks.compute_port.name=机器算力端口
+tile.mmcenetworks.wired_compute_interface.name=有线算力接口
+tile.mmcenetworks.wireless_compute_interface.name=无线算力接口
+tile.mmcenetworks.compute_distributor.name=算力分发端点
+tile.mmcenetworks.compute_matrix_port.name=算力矩阵端口
 gui.mmcenetworks.terminal.title=MMCE 网络终端
 gui.mmcenetworks.terminal.network=网络：%s
 gui.mmcenetworks.terminal.rename=名称：

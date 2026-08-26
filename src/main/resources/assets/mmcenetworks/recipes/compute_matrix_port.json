@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["ODO", "DCD", "ODO"],
+  "key": {
+    "O": { "item": "minecraft:obsidian" },
+    "D": { "item": "minecraft:diamond" },
+    "C": { "item": "mmcenetworks:compute_distributor" }
+  },
+  "result": { "item": "mmcenetworks:compute_matrix_port" }
+}

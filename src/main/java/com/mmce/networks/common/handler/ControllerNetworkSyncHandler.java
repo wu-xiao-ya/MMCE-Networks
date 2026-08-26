@@ -7,6 +7,7 @@ import com.mmce.networks.common.data.MMCENetworkSavedData;
 import com.mmce.networks.common.data.MMCENetworkSavedData.ControllerSnapshot;
 import com.mmce.networks.common.mmce.MmceReflection;
 import com.mmce.networks.common.compute.ComputeNetworkService;
+import com.mmce.networks.common.compute.transport.ComputeCableNetworkService;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.tileentity.TileEntity;
@@ -85,7 +86,9 @@ public class ControllerNetworkSyncHandler {
     @SubscribeEvent
     public void onWorldUnload(final WorldEvent.Unload event) {
         if (event.getWorld() != null && !event.getWorld().isRemote) {
-            ComputeNetworkService.clearWorld(event.getWorld().provider.getDimension());
+            int dimension = event.getWorld().provider.getDimension();
+            ComputeNetworkService.clearWorld(dimension);
+            ComputeCableNetworkService.clearWorld(dimension);
         }
     }
 

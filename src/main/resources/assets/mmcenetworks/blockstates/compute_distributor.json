@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "normal": { "model": "mmcenetworks:compute_distributor" }
+  }
+}

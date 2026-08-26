@@ -15,6 +15,7 @@ public final class MMCENetworksConfig {
     public static boolean enableSyncProfiling = false;
     public static int profilingLogIntervalTicks = 200;
     public static boolean enableFtbTeamAccess = true;
+    public static int computeCableMaxVisitedNodes = 8192;
     public static double terminalTextScale = 0.65D;
 
     private static File configFile;
@@ -74,6 +75,14 @@ public final class MMCENetworksConfig {
                 CATEGORY_GENERAL,
                 true,
                 "Allow players to access MMCE Networks owned by FTB Utilities teammates. Requires ftbutilities and ftblib; safely ignored when they are not installed."
+            );
+            computeCableMaxVisitedNodes = config.getInt(
+                "computeCableMaxVisitedNodes",
+                CATEGORY_GENERAL,
+                8192,
+                64,
+                1_000_000,
+                "Maximum number of loaded cable or endpoint blocks visited by one physical compute route search."
             );
             terminalTextScale = config.getFloat(
                 "terminalTextScale",

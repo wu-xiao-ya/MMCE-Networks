@@ -5,6 +5,8 @@ import mods.modularmachinery.RecipeCheckEvent;
 import mods.modularmachinery.RecipeFinishEvent;
 import mods.modularmachinery.FactoryRecipeTickEvent;
 
+// Physical CU/t transport also requires bound endpoint blocks and loaded cable
+// paths. See examples/README_compute_transport.md.
 // Replace these names with machines from the current pack.
 val setupMachine = "machine_a";
 val providerMachine = "machine_a";

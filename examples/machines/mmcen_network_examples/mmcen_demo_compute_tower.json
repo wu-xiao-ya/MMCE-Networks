@@ -33,7 +33,7 @@
       "y": 0,
       "z": 1,
       "elements": [
-        "modularmachinery:blockcasing@0"
+        "mmcenetworks:compute_distributor"
       ]
     },
     {
@@ -41,7 +41,23 @@
       "y": 1,
       "z": 0,
       "elements": [
-        "modularmachinery:blockcasing@0"
+        "mmcenetworks:compute_matrix_port"
+      ]
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -1,
+      "elements": [
+        "mmcenetworks:wired_compute_interface"
+      ]
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 1,
+      "elements": [
+        "mmcenetworks:wireless_compute_interface"
       ]
     }
   ]

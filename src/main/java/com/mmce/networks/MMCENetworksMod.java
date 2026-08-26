@@ -3,9 +3,12 @@ package com.mmce.networks;
 import com.mmce.networks.common.handler.ControllerNetworkSyncHandler;
 import com.mmce.networks.common.config.MMCENetworksConfig;
 import com.mmce.networks.common.network.NetworkHandler;
+import com.mmce.networks.common.tile.TileComputeEndpoint;
+import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.registry.GameRegistry;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,6 +33,10 @@ public class MMCENetworksMod {
     public void preInit(final FMLPreInitializationEvent event) {
         MMCENetworksConfig.load(event.getSuggestedConfigurationFile());
         NetworkHandler.init();
+        GameRegistry.registerTileEntity(
+            TileComputeEndpoint.class,
+            new ResourceLocation(MOD_ID, "compute_endpoint")
+        );
         MinecraftForge.EVENT_BUS.register(new ControllerNetworkSyncHandler());
         if (event.getSide().isClient()) {
             initClient();

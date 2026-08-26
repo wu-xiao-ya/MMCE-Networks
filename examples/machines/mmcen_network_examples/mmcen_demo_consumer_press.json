@@ -41,7 +41,7 @@
       "y": 1,
       "z": 0,
       "elements": [
-        "modularmachinery:blockcasing@0"
+        "mmcenetworks:compute_port"
       ]
     }
   ]
