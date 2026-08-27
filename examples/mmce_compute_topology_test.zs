@@ -128,7 +128,7 @@ RecipeBuilder.newBuilder("mmcen_test_compute_overload_consumer_run", OVERLOAD_CO
             }
             Networks.reportCompute(event.controller, 0, OVERLOAD_DEMAND);
             if (!Networks.isComputeDemandSatisfied(event.controller)) {
-                event.preventProgressing("压力测试机需要完整 100 CU/t，当前有线接口吞吐量为 96 CU/t");
+                event.preventProgressing("压力测试机需要完整 100 CU/t，当前线路吞吐量为 96 CU/t");
             }
         }
     })

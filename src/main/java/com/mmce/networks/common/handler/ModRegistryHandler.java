@@ -3,6 +3,8 @@ package com.mmce.networks.common.handler;
 import com.mmce.networks.MMCENetworksMod;
 import com.mmce.networks.common.init.ModBlocks;
 import com.mmce.networks.common.init.ModItems;
+import com.mmce.networks.common.block.BlockComputeEndpoint;
+import com.mmce.networks.common.item.ItemComputeEndpoint;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
@@ -25,7 +27,10 @@ public final class ModRegistryHandler {
         event.getRegistry().registerAll(ModItems.NETWORK_LINKER, ModItems.COMPUTE_BINDER);
         for (Block block : ModBlocks.ALL) {
             event.getRegistry().register(
-                new ItemBlock(block).setRegistryName(block.getRegistryName())
+                block instanceof BlockComputeEndpoint
+                    ? new ItemComputeEndpoint((BlockComputeEndpoint) block)
+                        .setRegistryName(block.getRegistryName())
+                    : new ItemBlock(block).setRegistryName(block.getRegistryName())
             );
         }
     }

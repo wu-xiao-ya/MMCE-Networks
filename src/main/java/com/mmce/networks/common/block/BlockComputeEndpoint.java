@@ -84,6 +84,8 @@ public class BlockComputeEndpoint extends Block implements ITileEntityProvider {
             ComputeEndpointAutoBindingService.synchronizeNow(worldIn);
         }
         TileComputeEndpoint endpoint = (TileComputeEndpoint) tile;
+        String rolePrefix = endpointType.getDisplayName() + "\uff1a"
+            + endpointType.getDescription() + "\uff1b";
         String text;
         if (endpoint.isBound()) {
             String bindingType = endpoint.isAutomaticBinding() ? "端点已自动归属：" : "端点已手动归属：";
@@ -95,7 +97,7 @@ public class BlockComputeEndpoint extends Block implements ITileEntityProvider {
             DiagnosticResult diagnostic = ComputeEndpointAutoBindingService.diagnose(worldIn, pos);
             text = "端点自动归属失败：" + describeDiagnostic(diagnostic);
         }
-        playerIn.sendMessage(new TextComponentString(text));
+        playerIn.sendMessage(new TextComponentString(rolePrefix + text));
         return true;
     }
 

@@ -24,7 +24,7 @@ RecipeBuilder.newBuilder("compute_network_setup", setupMachine, 10)
     })
     .build();
 
-// This machine supplies 100 CU/t through line_a.
+// This machine supplies 100 CU/t through the line_a access path.
 RecipeBuilder.newBuilder("compute_network_provider", providerMachine, 20)
     .addItemInput(<minecraft:redstone> * 1)
     .addCheckHandler(function(event as RecipeCheckEvent) {
@@ -40,8 +40,8 @@ RecipeBuilder.newBuilder("compute_network_provider", providerMachine, 20)
     })
     .build();
 
-// This machine requests 80 CU/t through line_b. It receives power from the
-// matrix even though its line is different from the provider line.
+// This machine requests 80 CU/t through the line_b access path. It receives
+// compute from the matrix even though its line is different from the provider.
 RecipeBuilder.newBuilder("compute_network_consumer", consumerMachine, 20)
     .addItemInput(<minecraft:coal> * 1)
     .addFactoryPreTickHandler(function(event as FactoryRecipeTickEvent) {

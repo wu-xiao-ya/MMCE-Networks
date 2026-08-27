@@ -1,6 +1,6 @@
 {
   "registryname": "mmcen_demo_compute_tower",
-  "localizedname": "§b算力矩阵与分发塔（演示）",
+  "localizedname": "§b算力矩阵（含分发节点演示）",
   "requires-blueprint": false,
   "color": "4AC7FF",
   "parts": [

@@ -11,8 +11,9 @@
 - `mmce_network_demo.zs`：基础示例，演示网络变量、资源池、算力占用和科技树。
 - `mmce_network_terminal_test.zs`：终端 GUI 测试示例，包含卡片式终端显示配置。
 - `README_terminal_test.md`：终端测试脚本的详细测试步骤。
-- `mmce_compute_network_demo.zs`：实时算力矩阵、接口、分发塔和路由示例。
-- `README_compute_test.md`：实时算力拓扑的详细测试步骤。
+- `mmce_compute_network_demo.zs`：实时算力矩阵、接入端、分发节点和路由示例。
+- `README_compute_transport.md`：实体线缆、无线接入和分发节点的职责说明。
+- `README_compute_topology_test.md`：实时算力拓扑的详细测试步骤。
 - `machines/mmcen_network_examples/`：六台可直接复制到测试包的 MMCE 联调机器。
 
 ### 快速测试流程
@@ -34,8 +35,9 @@ This directory contains CraftTweaker example scripts and test notes. Before use,
 - `mmce_network_demo.zs`: basic example for network variables, resource pools, compute usage, and tech tree.
 - `mmce_network_terminal_test.zs`: terminal GUI test example with terminal-card display configuration.
 - `README_terminal_test.md`: detailed walkthrough for the terminal test script.
-- `mmce_compute_network_demo.zs`: real-time compute matrix, interface, distributor, and route example.
-- `README_compute_test.md`: detailed walkthrough for the real-time compute topology.
+- `mmce_compute_network_demo.zs`: real-time compute matrix, access-port, distribution-node, and route example.
+- `README_compute_transport.md`: explanation of physical cables, wireless access, and distribution nodes.
+- `README_compute_topology_test.md`: detailed walkthrough for the real-time compute topology.
 - `machines/mmcen_network_examples/`: six MMCE integration-test machine definitions.
 
 ### Quick Test Flow
