@@ -59,9 +59,13 @@ RecipeBuilder.newBuilder("mmcen_test_compute_provider_run", PROVIDER_MACHINE, 20
     .addFactoryPreTickHandler(function(event as FactoryRecipeTickEvent) {
         if (Networks.hasNetwork(event.controller)) {
             if (!Networks.hasComputeRoute(event.controller)) {
-                Networks.bindComputeRoute(event.controller, PYLON_LINE, MAIN_DISTRIBUTOR, "wired");
+                if (!Networks.bindComputeRoute(event.controller, PYLON_LINE, MAIN_DISTRIBUTOR, "wired")) {
+                    event.preventProgressing("供给机的有线算力路线尚未配置");
+                }
             }
-            Networks.reportCompute(event.controller, PROVIDER_OUTPUT, 0);
+            if (!Networks.reportCompute(event.controller, PROVIDER_OUTPUT, 0)) {
+                event.preventProgressing("供给机的实体算力线路无效或尚未接通");
+            }
         }
     })
     .setParallelized(false)
