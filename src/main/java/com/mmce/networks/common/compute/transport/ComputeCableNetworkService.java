@@ -317,7 +317,13 @@ public final class ComputeCableNetworkService {
             || !isConnected(world, networkId, distributor, target)) {
             return false;
         }
-        return !search(world, networkId, start, target, distributor);
+        /*
+         * A distributor is a logical exchange point and throughput limiter.
+         * Redundant cable routes are valid; requiring the distributor to be
+         * the graph's unique cut vertex makes normal looped layouts fail even
+         * though every declared segment is physically connected.
+         */
+        return true;
     }
 
     private static boolean search(
