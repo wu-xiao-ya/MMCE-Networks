@@ -1,0 +1,48 @@
+{
+  "registryname": "mmcen_test_compute_wired_consumer",
+  "localizedname": "\u6709\u7ebf\u7b97\u529b\u6d88\u8d39\u6d4b\u8bd5\u673a",
+  "requires-blueprint": false,
+  "color": "F2B84B",
+  "parts": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "elements": [
+        "modularmachinery:mmcen_test_compute_wired_consumer_factory_controller@2"
+      ]
+    },
+    {
+      "x": -1,
+      "y": 0,
+      "z": 0,
+      "elements": [
+        "modularmachinery:blockinputbus"
+      ]
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "z": 0,
+      "elements": [
+        "modularmachinery:blockoutputbus"
+      ]
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 1,
+      "elements": [
+        "modularmachinery:blockcasing@0"
+      ]
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "z": 0,
+      "elements": [
+        "mmcenetworks:compute_port"
+      ]
+    }
+  ]
+}
