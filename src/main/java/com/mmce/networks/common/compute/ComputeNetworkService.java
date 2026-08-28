@@ -382,10 +382,17 @@ public final class ComputeNetworkService {
         NetworkKey key = new NetworkKey(world.provider.getDimension(), networkId);
         synchronized (LOCK) {
             RuntimeNetwork runtime = RUNTIME.computeIfAbsent(key, ignored -> new RuntimeNetwork());
-            NodeReport report = runtime.nodes.computeIfAbsent(nodeId, ignored -> new NodeReport());
             String normalizedInterface = normalize(interfaceId);
             String normalizedDistributor = normalize(distributorId);
             long tick = world.getTotalWorldTime();
+            if (tick <= runtime.lastSettledTick) {
+                return false;
+            }
+            Map<String, NodeReport> reports = runtime.reportsByTick.computeIfAbsent(
+                tick,
+                ignored -> new HashMap<>()
+            );
+            NodeReport report = reports.computeIfAbsent(nodeId, ignored -> new NodeReport());
             if (report.tick == tick) {
                 if (!report.interfaceId.equals(normalizedInterface)
                     || !report.distributorId.equals(normalizedDistributor)
@@ -417,13 +424,21 @@ public final class ComputeNetworkService {
         NetworkKey key = new NetworkKey(world.provider.getDimension(), networkId);
         synchronized (LOCK) {
             RuntimeNetwork runtime = RUNTIME.computeIfAbsent(key, ignored -> new RuntimeNetwork());
-            NodeReport report = runtime.nodes.computeIfAbsent(nodeId, ignored -> new NodeReport());
+            long tick = world.getTotalWorldTime();
+            if (tick <= runtime.lastSettledTick) {
+                return;
+            }
+            Map<String, NodeReport> reports = runtime.reportsByTick.computeIfAbsent(
+                tick,
+                ignored -> new HashMap<>()
+            );
+            NodeReport report = reports.computeIfAbsent(nodeId, ignored -> new NodeReport());
             report.interfaceId = "";
             report.distributorId = "";
             report.nodePos = nodePos.toImmutable();
             report.cpuOutput = 0L;
             report.demand = 0L;
-            report.tick = world.getTotalWorldTime();
+            report.tick = tick;
             report.routeStatus = routeStatus;
         }
     }
@@ -434,7 +449,12 @@ public final class ComputeNetworkService {
         }
 
         int dimension = world.provider.getDimension();
-        long tick = world.getTotalWorldTime();
+        // Reports can arrive asynchronously during this END phase. Settle only
+        // the completed tick so the current tick stays open for late reports.
+        long tick = world.getTotalWorldTime() - 1L;
+        if (tick < 0L) {
+            return;
+        }
         List<NetworkKey> keys;
         synchronized (LOCK) {
             keys = new ArrayList<>();
@@ -622,6 +642,7 @@ public final class ComputeNetworkService {
 
     private static void settleNetwork(final World world, final NetworkKey key, final long tick) {
         RuntimeNetwork runtime;
+        Map<String, NodeReport> reports;
         Map<String, NodeResult> previousResults;
         long previousCpuOutput;
         long previousDemand;
@@ -631,6 +652,9 @@ public final class ComputeNetworkService {
         synchronized (LOCK) {
             runtime = RUNTIME.get(key);
             if (runtime == null) {
+                return;
+            }
+            if (tick <= runtime.lastSettledTick) {
                 return;
             }
             previousResults = new HashMap<>(runtime.results);
@@ -645,16 +669,19 @@ public final class ComputeNetworkService {
             runtime.totalAllocated = 0L;
             runtime.eligibleNodes = 0;
             runtime.rejectedNodes = 0;
+            // Detach the completed bucket while holding the same lock used by
+            // reporters; newer buckets remain available to the next settle.
+            reports = runtime.reportsByTick.remove(tick);
+            runtime.reportsByTick.entrySet().removeIf(entry -> entry.getKey() <= tick);
+            runtime.lastSettledTick = tick;
         }
 
         NBTTagCompound data = getNetworkData(world, key.networkId);
         Topology topology = Topology.read(data);
         List<NodeEntry> entries = new ArrayList<>();
-        synchronized (LOCK) {
-            for (Map.Entry<String, NodeReport> entry : runtime.nodes.entrySet()) {
-                if (entry.getValue().tick == tick) {
-                    entries.add(new NodeEntry(entry.getKey(), entry.getValue()));
-                }
+        if (reports != null) {
+            for (Map.Entry<String, NodeReport> entry : reports.entrySet()) {
+                entries.add(new NodeEntry(entry.getKey(), entry.getValue()));
             }
         }
         entries.sort(Comparator.comparing(node -> node.nodeId));
@@ -745,7 +772,6 @@ public final class ComputeNetworkService {
             runtime.totalAllocated = usableSupply - remaining;
             runtime.eligibleNodes = accepted.size();
             runtime.rejectedNodes = Math.max(0, entries.size() - accepted.size());
-            runtime.nodes.clear();
             telemetryChanged = previousCpuOutput != runtime.totalCpuOutput
                 || previousDemand != runtime.totalDemand
                 || previousAllocated != runtime.totalAllocated
@@ -1299,7 +1325,7 @@ public final class ComputeNetworkService {
     }
 
     private static final class RuntimeNetwork {
-        private final Map<String, NodeReport> nodes = new HashMap<>();
+        private final Map<Long, Map<String, NodeReport>> reportsByTick = new HashMap<>();
         private final Map<String, NodeResult> results = new HashMap<>();
         private long lastSettledTick = -1L;
         private long totalCpuOutput;
