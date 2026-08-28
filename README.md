@@ -354,9 +354,14 @@ if (!Networks.isComputeDemandSatisfied(event.controller)) {
   `ComputeWiredRouteValidator` to enforce a physical cable graph.
 - `wireless` is validated by interface anchor, dimension, and coverage.
 - `reportCompute(controller, cpuOutput, demand)` resolves the bound path on the server.
+- `reportCompute(factoryEvent, cpuOutput, demand)` reports the current MMCE
+  factory thread separately, so a line can run the threads it can afford while
+  the remaining threads wait.
 - The legacy five-argument overload remains available, but its path IDs must
   exactly match the server route.
 - `isComputeDemandSatisfied` stays false below the complete demand.
+- Use the `FactoryRecipeEvent` overload of `isComputeDemandSatisfied` inside a
+  factory pre-tick handler when partial per-thread allocation is desired.
 
 ### Tech Tree Tutorial
 

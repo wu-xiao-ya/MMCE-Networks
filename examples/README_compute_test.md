@@ -36,6 +36,13 @@ The example demonstrates these first-version rules:
 - Repeated reports from the same controller, interface, and distributor in one
   tick are added together. This allows MMCE factory threads to contribute
   independently without overwriting each other.
+- Factory scripts can use the `FactoryRecipeEvent` overloads of
+  `reportCompute`, `getComputeAllocated`, and
+  `isComputeDemandSatisfied` to identify each MMCE factory thread separately.
+  A machine still counts as one topology node, while its threads can receive
+  partial allocation independently. For example, six threads requesting
+  `24 CU/t` on a `96 CU/t` line allow four threads to progress and leave two
+  waiting.
 - Machine and distributor limits are counted from nodes reporting during the
   current tick, so unloaded or stopped machines do not remain registered.
 - Supply, demand, allocation, and per-node results expire when they are not
@@ -64,9 +71,12 @@ Topology:
 Runtime:
 
 - `reportCompute(controller, cpuOutput, demand)`
+- `reportCompute(factoryEvent, cpuOutput, demand)` (thread-scoped)
 - `reportCompute(controller, interfaceId, distributorId, cpuOutput, demand)` (legacy validated overload)
 - `getComputeAllocated(controller)`
+- `getComputeAllocated(factoryEvent)` (thread-scoped)
 - `isComputeDemandSatisfied(controller)`
+- `isComputeDemandSatisfied(factoryEvent)` (thread-scoped)
 - `getComputeNetworkSupply(controller)`
 - `getComputeNetworkDemand(controller)`
 - `getComputeNetworkAllocated(controller)`

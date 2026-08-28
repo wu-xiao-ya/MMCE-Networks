@@ -762,6 +762,36 @@ public final class Networks {
     }
 
     /**
+     * Reports one MMCE factory thread through the server-side bound route.
+     * The controller remains one network node, but this contribution receives
+     * its own allocation result.
+     */
+    @ZenMethod
+    public static boolean reportCompute(
+        final FactoryRecipeEvent event,
+        final long cpuOutput,
+        final long demand
+    ) {
+        if (event == null) {
+            return false;
+        }
+        IMachineController controller = event.getController();
+        NetworkContext context = getContext(controller);
+        if (context == null) {
+            return false;
+        }
+        return ComputeNetworkService.reportNodeContribution(
+            context.world,
+            context.networkId,
+            context.nodeId(),
+            context.tile.getPos(),
+            computeContributionId(event),
+            cpuOutput,
+            demand
+        );
+    }
+
+    /**
      * Legacy overload. The supplied path must match the bound route.
      */
     @ZenMethod
@@ -803,6 +833,38 @@ public final class Networks {
             return ComputeNetworkService.isDemandSatisfied(context.world, context.networkId, context.nodeId());
         }
         return getClientComputeTelemetry(controller).getBoolean("nodeSatisfied");
+    }
+
+    @ZenMethod
+    public static long getComputeAllocated(final FactoryRecipeEvent event) {
+        if (event == null) {
+            return 0L;
+        }
+        IMachineController controller = event.getController();
+        NetworkContext context = getContext(controller);
+        return context == null
+            ? 0L
+            : ComputeNetworkService.getAllocated(
+                context.world,
+                context.networkId,
+                context.nodeId(),
+                computeContributionId(event)
+            );
+    }
+
+    @ZenMethod
+    public static boolean isComputeDemandSatisfied(final FactoryRecipeEvent event) {
+        if (event == null) {
+            return false;
+        }
+        IMachineController controller = event.getController();
+        NetworkContext context = getContext(controller);
+        return context != null && ComputeNetworkService.isDemandSatisfied(
+            context.world,
+            context.networkId,
+            context.nodeId(),
+            computeContributionId(event)
+        );
     }
 
     @ZenMethod
@@ -1004,6 +1066,17 @@ public final class Networks {
         @Nullable final IMachineController controller
     ) {
         return ComputeNetworkService.getSyncedTelemetry(getClientSharedData(controller));
+    }
+
+    private static String computeContributionId(final FactoryRecipeEvent event) {
+        if (event == null || event.getFactoryRecipeThread() == null) {
+            return "";
+        }
+        String threadName = event.getFactoryRecipeThread().getThreadName();
+        return "thread:"
+            + Integer.toHexString(System.identityHashCode(event.getFactoryRecipeThread()))
+            + ":"
+            + (threadName == null ? "unnamed" : threadName);
     }
 
     private static boolean isNullOrEmpty(@Nullable final String value) {

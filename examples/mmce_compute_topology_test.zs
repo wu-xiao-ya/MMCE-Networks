@@ -63,7 +63,7 @@ RecipeBuilder.newBuilder("mmcen_test_compute_provider_run", PROVIDER_MACHINE, 20
                     event.preventProgressing("供给机的有线算力路线尚未配置");
                 }
             }
-            if (!Networks.reportCompute(event.controller, PROVIDER_OUTPUT, 0)) {
+            if (!Networks.reportCompute(event, PROVIDER_OUTPUT, 0)) {
                 event.preventProgressing("供给机的实体算力线路无效或尚未接通");
             }
         }
@@ -83,8 +83,8 @@ RecipeBuilder.newBuilder("mmcen_test_compute_wired_consumer_run", WIRED_CONSUMER
             if (!Networks.hasComputeRoute(event.controller)) {
                 Networks.bindComputeRoute(event.controller, WORK_LINE, MAIN_DISTRIBUTOR, "wired");
             }
-            Networks.reportCompute(event.controller, 0, WIRED_DEMAND);
-            if (!Networks.isComputeDemandSatisfied(event.controller)) {
+            Networks.reportCompute(event, 0, WIRED_DEMAND);
+            if (!Networks.isComputeDemandSatisfied(event)) {
                 event.preventProgressing("有线消费测试机需要完整 24 CU/t");
             }
         }
@@ -104,8 +104,8 @@ RecipeBuilder.newBuilder("mmcen_test_compute_wireless_consumer_run", WIRELESS_CO
             if (!Networks.hasComputeRoute(event.controller)) {
                 Networks.bindComputeRoute(event.controller, RESEARCH_LINE, MAIN_DISTRIBUTOR, "wireless");
             }
-            Networks.reportCompute(event.controller, 0, WIRELESS_DEMAND);
-            if (!Networks.isComputeDemandSatisfied(event.controller)) {
+            Networks.reportCompute(event, 0, WIRELESS_DEMAND);
+            if (!Networks.isComputeDemandSatisfied(event)) {
                 event.preventProgressing("无线消费测试机需要完整 40 CU/t，且必须处于无线覆盖范围");
             }
         }
@@ -126,8 +126,8 @@ RecipeBuilder.newBuilder("mmcen_test_compute_overload_consumer_run", OVERLOAD_CO
             if (!Networks.hasComputeRoute(event.controller)) {
                 Networks.bindComputeRoute(event.controller, WORK_LINE, MAIN_DISTRIBUTOR, "wired");
             }
-            Networks.reportCompute(event.controller, 0, OVERLOAD_DEMAND);
-            if (!Networks.isComputeDemandSatisfied(event.controller)) {
+            Networks.reportCompute(event, 0, OVERLOAD_DEMAND);
+            if (!Networks.isComputeDemandSatisfied(event)) {
                 event.preventProgressing("压力测试机需要完整 100 CU/t，当前线路吞吐量为 96 CU/t");
             }
         }

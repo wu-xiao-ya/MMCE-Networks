@@ -311,7 +311,7 @@ public final class ComputeNetworkService {
         Topology topology = Topology.read(getNetworkData(world, networkId));
         RouteResolution resolution = resolveRoute(world, networkId, topology, nodeId, nodePos);
         if (!resolution.isValid()) {
-            rejectNodeReport(world, networkId, nodeId, nodePos, resolution.status);
+            rejectNodeReport(world, networkId, nodeId, nodePos, null, resolution.status);
             return false;
         }
         return recordNodeReport(
@@ -321,6 +321,46 @@ public final class ComputeNetworkService {
             nodePos,
             resolution.route.interfaceId,
             resolution.route.distributorId,
+            null,
+            cpuOutput,
+            demand,
+            resolution.status
+        );
+    }
+
+    /**
+     * Reports one contribution from a machine thread. The machine remains a
+     * single topology node, while allocation can be resolved per contribution.
+     */
+    public static boolean reportNodeContribution(
+        final World world,
+        final String networkId,
+        final String nodeId,
+        final BlockPos nodePos,
+        @Nullable final String contributionId,
+        final long cpuOutput,
+        final long demand
+    ) {
+        if (!validWorld(world) || empty(networkId) || empty(nodeId)
+            || nodePos == null || cpuOutput < 0L || demand < 0L) {
+            return false;
+        }
+        Topology topology = Topology.read(getNetworkData(world, networkId));
+        RouteResolution resolution = resolveRoute(world, networkId, topology, nodeId, nodePos);
+        if (!resolution.isValid()) {
+            rejectNodeReport(
+                world, networkId, nodeId, nodePos, contributionId, resolution.status
+            );
+            return false;
+        }
+        return recordNodeReport(
+            world,
+            networkId,
+            nodeId,
+            nodePos,
+            resolution.route.interfaceId,
+            resolution.route.distributorId,
+            contributionId,
             cpuOutput,
             demand,
             resolution.status
@@ -352,7 +392,7 @@ public final class ComputeNetworkService {
         if (!resolution.isValid()
             || !resolution.route.interfaceId.equals(normalize(interfaceId))
             || !resolution.route.distributorId.equals(normalize(distributorId))) {
-            rejectNodeReport(world, networkId, nodeId, nodePos, resolution.status);
+            rejectNodeReport(world, networkId, nodeId, nodePos, null, resolution.status);
             return false;
         }
         return recordNodeReport(
@@ -362,6 +402,7 @@ public final class ComputeNetworkService {
             nodePos,
             resolution.route.interfaceId,
             resolution.route.distributorId,
+            null,
             cpuOutput,
             demand,
             resolution.status
@@ -375,6 +416,7 @@ public final class ComputeNetworkService {
         final BlockPos nodePos,
         final String interfaceId,
         final String distributorId,
+        @Nullable final String contributionId,
         final long cpuOutput,
         final long demand,
         final RouteStatus routeStatus
@@ -393,6 +435,7 @@ public final class ComputeNetworkService {
                 ignored -> new HashMap<>()
             );
             NodeReport report = reports.computeIfAbsent(nodeId, ignored -> new NodeReport());
+            String normalizedContribution = normalizeContributionId(contributionId);
             if (report.tick == tick) {
                 if (!report.interfaceId.equals(normalizedInterface)
                     || !report.distributorId.equals(normalizedDistributor)
@@ -409,6 +452,12 @@ public final class ComputeNetworkService {
                 report.demand = demand;
                 report.tick = tick;
             }
+            Contribution contribution = report.contributions.computeIfAbsent(
+                normalizedContribution,
+                ignored -> new Contribution()
+            );
+            contribution.cpuOutput = safeAdd(contribution.cpuOutput, cpuOutput);
+            contribution.demand = safeAdd(contribution.demand, demand);
             report.routeStatus = routeStatus;
         }
         return true;
@@ -419,6 +468,7 @@ public final class ComputeNetworkService {
         final String networkId,
         final String nodeId,
         final BlockPos nodePos,
+        @Nullable final String contributionId,
         final RouteStatus routeStatus
     ) {
         NetworkKey key = new NetworkKey(world.provider.getDimension(), networkId);
@@ -440,6 +490,8 @@ public final class ComputeNetworkService {
             report.demand = 0L;
             report.tick = tick;
             report.routeStatus = routeStatus;
+            report.contributions.clear();
+            report.contributions.put(normalizeContributionId(contributionId), new Contribution());
         }
     }
 
@@ -485,6 +537,25 @@ public final class ComputeNetworkService {
         }
     }
 
+    public static long getAllocated(
+        final World world,
+        final String networkId,
+        final String nodeId,
+        @Nullable final String contributionId
+    ) {
+        if (!validWorld(world) || empty(networkId) || empty(nodeId)) {
+            return 0L;
+        }
+        synchronized (LOCK) {
+            RuntimeNetwork runtime = RUNTIME.get(new NetworkKey(world.provider.getDimension(), networkId));
+            NodeResult result = runtime == null ? null : runtime.results.get(nodeId);
+            if (result == null) {
+                return 0L;
+            }
+            return result.getContributionAllocated(normalizeContributionId(contributionId));
+        }
+    }
+
     public static boolean isDemandSatisfied(
         final World world,
         final String networkId,
@@ -497,6 +568,23 @@ public final class ComputeNetworkService {
             RuntimeNetwork runtime = RUNTIME.get(new NetworkKey(world.provider.getDimension(), networkId));
             NodeResult result = runtime == null ? null : runtime.results.get(nodeId);
             return result != null && result.demand > 0L && result.allocated >= result.demand;
+        }
+    }
+
+    public static boolean isDemandSatisfied(
+        final World world,
+        final String networkId,
+        final String nodeId,
+        @Nullable final String contributionId
+    ) {
+        if (!validWorld(world) || empty(networkId) || empty(nodeId)) {
+            return false;
+        }
+        synchronized (LOCK) {
+            RuntimeNetwork runtime = RUNTIME.get(new NetworkKey(world.provider.getDimension(), networkId));
+            NodeResult result = runtime == null ? null : runtime.results.get(nodeId);
+            return result != null
+                && result.isContributionSatisfied(normalizeContributionId(contributionId));
         }
     }
 
@@ -726,44 +814,81 @@ public final class ComputeNetworkService {
         long remaining = usableSupply;
         Map<String, Long> remainingInterfaceDemand = new HashMap<>();
         Map<String, Long> remainingDistributorDemand = new HashMap<>();
+        Map<String, Long> allocatedByNode = new HashMap<>();
+        Map<String, Map<String, Long>> allocatedByContribution = new HashMap<>();
         for (NodeEntry entry : entries) {
             NodeReport report = entry.report;
             if (!accepted.contains(entry.nodeId) || report.demand <= 0L) {
                 continue;
             }
-            long demandPathCapacity = Math.min(
-                getRemainingInterfaceCapacity(remainingInterfaceDemand, topology, report.interfaceId),
-                getRemainingDistributorCapacity(remainingDistributorDemand, topology, report.distributorId)
-            );
-            long allocated = Math.min(report.demand, Math.min(remaining, demandPathCapacity));
-            if (allocated <= 0L) {
-                synchronized (LOCK) {
-                    runtime.results.put(
+            for (ContributionEntry contributionEntry : getContributions(report)) {
+                Contribution contribution = contributionEntry.contribution;
+                if (contribution.demand <= 0L) {
+                    continue;
+                }
+                long demandPathCapacity = Math.min(
+                    getRemainingInterfaceCapacity(
+                        remainingInterfaceDemand, topology, report.interfaceId
+                    ),
+                    getRemainingDistributorCapacity(
+                        remainingDistributorDemand, topology, report.distributorId
+                    )
+                );
+                long allocated = Math.min(contribution.demand, Math.min(remaining, demandPathCapacity));
+                if (allocated > 0L) {
+                    consumeCapacity(
+                        remainingInterfaceDemand, topology.interfaces, report.interfaceId, allocated
+                    );
+                    consumeDistributorCapacity(
+                        remainingDistributorDemand,
+                        topology.distributors,
+                        report.distributorId,
+                        allocated
+                    );
+                    remaining -= allocated;
+                    allocatedByNode.put(
                         entry.nodeId,
-                        new NodeResult(report.demand, 0L, report.routeStatus)
+                        safeAdd(allocatedByNode.getOrDefault(entry.nodeId, 0L), allocated)
+                    );
+                    Map<String, Long> contributionAllocations = allocatedByContribution.computeIfAbsent(
+                        entry.nodeId,
+                        ignored -> new HashMap<>()
+                    );
+                    contributionAllocations.put(
+                        contributionEntry.id,
+                        safeAdd(
+                            contributionAllocations.getOrDefault(contributionEntry.id, 0L),
+                            allocated
+                        )
                     );
                 }
-                continue;
-            }
-            consumeCapacity(remainingInterfaceDemand, topology.interfaces, report.interfaceId, allocated);
-            consumeDistributorCapacity(
-                remainingDistributorDemand, topology.distributors, report.distributorId, allocated
-            );
-            remaining -= allocated;
-            synchronized (LOCK) {
-                runtime.results.put(
-                    entry.nodeId,
-                    new NodeResult(report.demand, allocated, report.routeStatus)
-                );
             }
         }
 
         boolean telemetryChanged;
         synchronized (LOCK) {
             for (NodeEntry entry : entries) {
-                runtime.results.putIfAbsent(
+                Map<String, Long> contributionAllocations = allocatedByContribution.get(entry.nodeId);
+                Map<String, ContributionResult> contributionResults = new HashMap<>();
+                for (ContributionEntry contributionEntry : getContributions(entry.report)) {
+                    long allocated = contributionAllocations == null
+                        ? 0L
+                        : contributionAllocations.getOrDefault(contributionEntry.id, 0L);
+                    contributionResults.put(
+                        contributionEntry.id,
+                        new ContributionResult(contributionEntry.contribution.demand, allocated)
+                    );
+                }
+                runtime.results.put(
                     entry.nodeId,
-                    new NodeResult(entry.report.demand, 0L, entry.report.routeStatus)
+                    new NodeResult(
+                        entry.report.demand,
+                        accepted.contains(entry.nodeId)
+                            ? allocatedByNode.getOrDefault(entry.nodeId, 0L)
+                            : 0L,
+                        entry.report.routeStatus,
+                        contributionResults
+                    )
                 );
             }
             runtime.lastSettledTick = tick;
@@ -835,6 +960,15 @@ public final class ComputeNetworkService {
             matrixCount++;
         }
         return accepted;
+    }
+
+    private static List<ContributionEntry> getContributions(final NodeReport report) {
+        List<ContributionEntry> result = new ArrayList<>();
+        for (Map.Entry<String, Contribution> entry : report.contributions.entrySet()) {
+            result.add(new ContributionEntry(entry.getKey(), entry.getValue()));
+        }
+        result.sort(Comparator.comparing(entry -> entry.id));
+        return result;
     }
 
     private static long getRemainingInterfaceCapacity(
@@ -1184,6 +1318,10 @@ public final class ComputeNetworkService {
         return empty(value) ? "" : value.trim();
     }
 
+    private static String normalizeContributionId(@Nullable final String value) {
+        return normalize(value);
+    }
+
     private static long safeAdd(final long left, final long right) {
         if (right > 0L && left > Long.MAX_VALUE - right) {
             return Long.MAX_VALUE;
@@ -1343,6 +1481,22 @@ public final class ComputeNetworkService {
         private long demand;
         private long tick = -1L;
         private RouteStatus routeStatus = RouteStatus.UNBOUND;
+        private final Map<String, Contribution> contributions = new HashMap<>();
+    }
+
+    private static final class Contribution {
+        private long cpuOutput;
+        private long demand;
+    }
+
+    private static final class ContributionEntry {
+        private final String id;
+        private final Contribution contribution;
+
+        private ContributionEntry(final String id, final Contribution contribution) {
+            this.id = id;
+            this.contribution = contribution;
+        }
     }
 
     private static final class NodeEntry {
@@ -1359,15 +1513,28 @@ public final class ComputeNetworkService {
         private final long demand;
         private final long allocated;
         private final RouteStatus routeStatus;
+        private final Map<String, ContributionResult> contributions;
 
         private NodeResult(
             final long demand,
             final long allocated,
-            final RouteStatus routeStatus
+            final RouteStatus routeStatus,
+            final Map<String, ContributionResult> contributions
         ) {
             this.demand = demand;
             this.allocated = allocated;
             this.routeStatus = routeStatus;
+            this.contributions = contributions;
+        }
+
+        private long getContributionAllocated(final String contributionId) {
+            ContributionResult result = contributions.get(contributionId);
+            return result == null ? 0L : result.allocated;
+        }
+
+        private boolean isContributionSatisfied(final String contributionId) {
+            ContributionResult result = contributions.get(contributionId);
+            return result != null && result.demand > 0L && result.allocated >= result.demand;
         }
 
         @Override
@@ -1381,12 +1548,40 @@ public final class ComputeNetworkService {
             NodeResult other = (NodeResult) obj;
             return demand == other.demand
                 && allocated == other.allocated
-                && routeStatus == other.routeStatus;
+                && routeStatus == other.routeStatus
+                && contributions.equals(other.contributions);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(demand, allocated, routeStatus);
+            return Objects.hash(demand, allocated, routeStatus, contributions);
+        }
+    }
+
+    private static final class ContributionResult {
+        private final long demand;
+        private final long allocated;
+
+        private ContributionResult(final long demand, final long allocated) {
+            this.demand = demand;
+            this.allocated = allocated;
+        }
+
+        @Override
+        public boolean equals(final Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof ContributionResult)) {
+                return false;
+            }
+            ContributionResult other = (ContributionResult) obj;
+            return demand == other.demand && allocated == other.allocated;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(demand, allocated);
         }
     }
 
