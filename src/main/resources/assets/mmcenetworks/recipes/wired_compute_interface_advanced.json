@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["ECE", "ERE", "ECE"],
+  "key": {
+    "E": { "item": "minecraft:emerald" },
+    "C": { "item": "mmcenetworks:compute_cable" },
+    "R": { "item": "mmcenetworks:wired_compute_interface_reinforced" }
+  },
+  "result": { "item": "mmcenetworks:wired_compute_interface_advanced" }
+}

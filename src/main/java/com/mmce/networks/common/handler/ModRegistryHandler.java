@@ -4,6 +4,7 @@ import com.mmce.networks.MMCENetworksMod;
 import com.mmce.networks.common.init.ModBlocks;
 import com.mmce.networks.common.init.ModItems;
 import com.mmce.networks.common.block.BlockComputeEndpoint;
+import com.mmce.networks.common.item.ItemComputeCable;
 import com.mmce.networks.common.item.ItemComputeEndpoint;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
@@ -30,6 +31,8 @@ public final class ModRegistryHandler {
                 block instanceof BlockComputeEndpoint
                     ? new ItemComputeEndpoint((BlockComputeEndpoint) block)
                         .setRegistryName(block.getRegistryName())
+                    : block == ModBlocks.COMPUTE_CABLE
+                        ? new ItemComputeCable(block).setRegistryName(block.getRegistryName())
                     : new ItemBlock(block).setRegistryName(block.getRegistryName())
             );
         }

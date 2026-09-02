@@ -27,13 +27,26 @@ import javax.annotation.Nullable;
 
 public class BlockComputeEndpoint extends Block implements ITileEntityProvider {
     private final ComputeEndpointType endpointType;
+    private final long computeThroughput;
+    private final String throughputTier;
 
     public BlockComputeEndpoint(
         final String registryName,
         final ComputeEndpointType endpointType
     ) {
+        this(registryName, endpointType, defaultThroughput(endpointType), defaultThroughputTier(endpointType));
+    }
+
+    public BlockComputeEndpoint(
+        final String registryName,
+        final ComputeEndpointType endpointType,
+        final long computeThroughput,
+        final String throughputTier
+    ) {
         super(Material.IRON);
         this.endpointType = endpointType;
+        this.computeThroughput = Math.max(0L, computeThroughput);
+        this.throughputTier = throughputTier == null ? "" : throughputTier;
         setRegistryName(new ResourceLocation(MMCENetworksMod.MOD_ID, registryName));
         setTranslationKey(MMCENetworksMod.MOD_ID + "." + registryName);
         setHardness(3.5F);
@@ -43,6 +56,22 @@ public class BlockComputeEndpoint extends Block implements ITileEntityProvider {
 
     public ComputeEndpointType getEndpointType() {
         return endpointType;
+    }
+
+    public long getComputeThroughput() {
+        return computeThroughput;
+    }
+
+    public String getThroughputTier() {
+        return throughputTier;
+    }
+
+    private static long defaultThroughput(final ComputeEndpointType endpointType) {
+        return endpointType == ComputeEndpointType.WIRED_INTERFACE ? 96L : Long.MAX_VALUE;
+    }
+
+    private static String defaultThroughputTier(final ComputeEndpointType endpointType) {
+        return endpointType == ComputeEndpointType.WIRED_INTERFACE ? "\u57fa\u7840\u7ea7" : "";
     }
 
     @Override
@@ -84,8 +113,8 @@ public class BlockComputeEndpoint extends Block implements ITileEntityProvider {
             ComputeEndpointAutoBindingService.synchronizeNow(worldIn);
         }
         TileComputeEndpoint endpoint = (TileComputeEndpoint) tile;
-        String rolePrefix = endpointType.getDisplayName() + "\uff1a"
-            + endpointType.getDescription() + "\uff1b";
+        String rolePrefix = "\u7c7b\u522b\uff1a" + endpointType.getCategory()
+            + "\uff1b\u804c\u8d23\uff1a" + endpointType.getDisplayName() + "\u3002";
         String text;
         if (endpoint.isBound()) {
             String bindingType = endpoint.isAutomaticBinding() ? "端点已自动归属：" : "端点已手动归属：";

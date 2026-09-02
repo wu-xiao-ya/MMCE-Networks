@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["DCD", "CRC", "DCD"],
+  "key": {
+    "D": { "item": "minecraft:diamond" },
+    "C": { "item": "mmcenetworks:compute_cable" },
+    "R": { "item": "mmcenetworks:wired_compute_interface" }
+  },
+  "result": { "item": "mmcenetworks:wired_compute_interface_reinforced" }
+}

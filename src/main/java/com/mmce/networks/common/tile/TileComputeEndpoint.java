@@ -63,6 +63,28 @@ public class TileComputeEndpoint extends TileEntity {
             : null;
     }
 
+    public long getComputeThroughput() {
+        if (world == null) {
+            return 0L;
+        }
+        IBlockState state = world.getBlockState(pos);
+        Block block = state.getBlock();
+        return block instanceof BlockComputeEndpoint
+            ? ((BlockComputeEndpoint) block).getComputeThroughput()
+            : 0L;
+    }
+
+    public String getThroughputTier() {
+        if (world == null) {
+            return "";
+        }
+        IBlockState state = world.getBlockState(pos);
+        Block block = state.getBlock();
+        return block instanceof BlockComputeEndpoint
+            ? ((BlockComputeEndpoint) block).getThroughputTier()
+            : "";
+    }
+
     public boolean matchesBinding(
         final String expectedNetworkId,
         final int expectedDimension,

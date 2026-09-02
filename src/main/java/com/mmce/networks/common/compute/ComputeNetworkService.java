@@ -26,8 +26,9 @@ import java.util.Set;
  */
 public final class ComputeNetworkService {
     private static final String ROOT_TAG = "_computeNetwork";
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
     private static final String MATRIX_TAG = "matrix";
+    private static final String MATRICES_TAG = "matrices";
     private static final String INTERFACES_TAG = "interfaces";
     private static final String DISTRIBUTORS_TAG = "distributors";
     private static final String ROUTES_TAG = "routes";
@@ -84,10 +85,22 @@ public final class ComputeNetworkService {
         }
         return mutateTopology(world, networkId, data -> {
             NBTTagCompound root = getRoot(data, true);
-            NBTTagCompound matrix = getCompound(root, MATRIX_TAG, true);
-            matrix.setLong(THROUGHPUT_TAG, throughput);
-            matrix.setInteger(MACHINE_LIMIT_TAG, machineLimit);
-            writeAnchor(matrix, world, anchor);
+            if (anchor == null) {
+                // Keep the anchor-less overload compatible with older callers.
+                NBTTagCompound matrix = getCompound(root, MATRIX_TAG, true);
+                matrix.setLong(THROUGHPUT_TAG, throughput);
+                matrix.setInteger(MACHINE_LIMIT_TAG, machineLimit);
+                writeAnchor(matrix, world, null);
+            } else {
+                // An anchored configuration is the current format. Remove the
+                // single-slot legacy record so it cannot shadow this module.
+                root.removeTag(MATRIX_TAG);
+                NBTTagCompound matrices = getCompound(root, MATRICES_TAG, true);
+                NBTTagCompound matrix = getCompound(matrices, matrixId(world, anchor), true);
+                matrix.setLong(THROUGHPUT_TAG, throughput);
+                matrix.setInteger(MACHINE_LIMIT_TAG, machineLimit);
+                writeAnchor(matrix, world, anchor);
+            }
             root.setInteger("schema", SCHEMA_VERSION);
             return true;
         });
@@ -795,7 +808,7 @@ public final class ComputeNetworkService {
             }
             long amount = entry.report.cpuOutput;
             amount = Math.min(amount, getRemainingInterfaceCapacity(
-                remainingInterfaceSupply, topology, entry.report.interfaceId
+                world, key.networkId, remainingInterfaceSupply, topology, entry.report.interfaceId
             ));
             amount = Math.min(amount, getRemainingDistributorCapacity(
                 remainingDistributorSupply, topology, entry.report.distributorId
@@ -809,7 +822,10 @@ public final class ComputeNetworkService {
             );
             usableSupply = safeAdd(usableSupply, amount);
         }
-        usableSupply = Math.min(usableSupply, topology.matrixThroughput);
+        usableSupply = Math.min(
+            usableSupply,
+            getMatrixThroughput(world, key.networkId, topology)
+        );
 
         long remaining = usableSupply;
         Map<String, Long> remainingInterfaceDemand = new HashMap<>();
@@ -828,7 +844,7 @@ public final class ComputeNetworkService {
                 }
                 long demandPathCapacity = Math.min(
                     getRemainingInterfaceCapacity(
-                        remainingInterfaceDemand, topology, report.interfaceId
+                        world, key.networkId, remainingInterfaceDemand, topology, report.interfaceId
                     ),
                     getRemainingDistributorCapacity(
                         remainingDistributorDemand, topology, report.distributorId
@@ -919,6 +935,7 @@ public final class ComputeNetworkService {
         Map<String, Integer> lineCounts = new HashMap<>();
         Map<String, Integer> distributorCounts = new HashMap<>();
         int matrixCount = 0;
+        int matrixMachineLimit = getMatrixMachineLimit(world, networkId, topology);
         for (NodeEntry entry : entries) {
             NodeReport report = entry.report;
             RouteResolution resolution = resolveRoute(
@@ -948,7 +965,7 @@ public final class ComputeNetworkService {
             if (distributor != null && distributor.machineLimit > 0 && distributorCount >= distributor.machineLimit) {
                 continue;
             }
-            if (topology.matrixMachineLimit > 0 && matrixCount >= topology.matrixMachineLimit) {
+            if (matrixMachineLimit > 0 && matrixCount >= matrixMachineLimit) {
                 continue;
             }
             if (distributor != null && distributor.bindingLimit > 0 && distributorCount >= distributor.bindingLimit) {
@@ -972,6 +989,8 @@ public final class ComputeNetworkService {
     }
 
     private static long getRemainingInterfaceCapacity(
+        final World world,
+        final String networkId,
         final Map<String, Long> remaining,
         final Topology topology,
         final String interfaceId
@@ -981,6 +1000,13 @@ public final class ComputeNetworkService {
         }
         InterfaceConfig config = topology.interfaces.get(interfaceId);
         long capacity = config == null ? UNLIMITED : config.throughput;
+        if (config != null && !config.wireless && config.anchor != null
+            && config.anchor.dimension == world.provider.getDimension()) {
+            long physicalCapacity = ComputeCableNetworkService.getWiredInterfaceThroughput(
+                world, networkId, config.anchor.position
+            );
+            capacity = Math.min(capacity, physicalCapacity);
+        }
         remaining.put(interfaceId, capacity);
         return capacity;
     }
@@ -1025,6 +1051,68 @@ public final class ComputeNetworkService {
 
     private static Topology readTopology(final World world, final String networkId) {
         return Topology.read(getNetworkData(world, networkId));
+    }
+
+    private static String matrixId(final World world, final BlockPos anchor) {
+        return world.provider.getDimension() + ":" + anchor.toLong();
+    }
+
+    private static long getMatrixThroughput(
+        final World world,
+        final String networkId,
+        final Topology topology
+    ) {
+        long total = 0L;
+        boolean active = false;
+        Set<String> seen = new HashSet<>();
+        for (MatrixConfig matrix : topology.matrices) {
+            if (matrix.anchor == null
+                || !seen.add(matrix.anchor.key())
+                || !ComputeCableNetworkService.hasBoundMatrixEndpoint(
+                    world, networkId, matrix.anchor.position
+                )) {
+                continue;
+            }
+            active = true;
+            total = safeAdd(total, matrix.throughput);
+        }
+        return active
+            ? total
+            : topology.hasLegacyMatrix
+                ? topology.legacyMatrixThroughput
+                : 0L;
+    }
+
+    private static int getMatrixMachineLimit(
+        final World world,
+        final String networkId,
+        final Topology topology
+    ) {
+        int total = 0;
+        boolean active = false;
+        Set<String> seen = new HashSet<>();
+        for (MatrixConfig matrix : topology.matrices) {
+            if (matrix.anchor == null
+                || !seen.add(matrix.anchor.key())
+                || !ComputeCableNetworkService.hasBoundMatrixEndpoint(
+                    world, networkId, matrix.anchor.position
+                )) {
+                continue;
+            }
+            active = true;
+            if (matrix.machineLimit == 0) {
+                return 0;
+            }
+            if (total > Integer.MAX_VALUE - matrix.machineLimit) {
+                return Integer.MAX_VALUE;
+            }
+            total += matrix.machineLimit;
+        }
+        return active
+            ? total
+            : topology.hasLegacyMatrix
+                ? topology.legacyMatrixMachineLimit
+                : 0;
     }
 
     private static NBTTagCompound getNetworkData(final World world, final String networkId) {
@@ -1140,11 +1228,9 @@ public final class ComputeNetworkService {
         if (line.anchor.dimension != dimension) {
             return RouteResolution.of(route, RouteStatus.DIMENSION_MISMATCH);
         }
-        if (topology.matrixAnchor == null) {
+        List<Anchor> matrixAnchors = topology.getActiveMatrixAnchors(world, networkId);
+        if (matrixAnchors.isEmpty()) {
             return RouteResolution.of(route, RouteStatus.MATRIX_ANCHOR_MISSING);
-        }
-        if (topology.matrixAnchor.dimension != dimension) {
-            return RouteResolution.of(route, RouteStatus.DIMENSION_MISMATCH);
         }
         BlockPos distributorAnchor = null;
         if (distributor != null) {
@@ -1157,52 +1243,63 @@ public final class ComputeNetworkService {
             distributorAnchor = distributor.anchor.position;
         }
 
-        ValidationResult physicalResult = routeWireless
-            ? ComputeCableNetworkService.validateWirelessRoute(
-                world,
-                networkId,
-                nodePos,
-                line.anchor.position,
-                distributorAnchor,
-                topology.matrixAnchor.position,
-                line.coverage
-            )
-            : ComputeCableNetworkService.validateWiredRoute(
-                world,
-                networkId,
-                nodePos,
-                line.anchor.position,
-                distributorAnchor,
-                topology.matrixAnchor.position
-            );
-        RouteStatus physicalStatus = mapPhysicalStatus(physicalResult);
-        if (physicalStatus != RouteStatus.VALID) {
-            return RouteResolution.of(route, physicalStatus);
-        }
+        RouteStatus lastPhysicalStatus = RouteStatus.MATRIX_ANCHOR_MISSING;
+        for (Anchor matrixAnchor : matrixAnchors) {
+            if (matrixAnchor.dimension != dimension) {
+                lastPhysicalStatus = RouteStatus.DIMENSION_MISMATCH;
+                continue;
+            }
 
-        if (!routeWireless) {
-            ComputeWiredRouteValidator validator = wiredRouteValidator;
-            if (validator != null) {
-                boolean connected;
-                try {
-                    connected = validator.isConnected(
-                        world,
-                        networkId,
-                        nodeId,
-                        nodePos,
-                        line.anchor.position,
-                        distributorAnchor,
-                        topology.matrixAnchor.position
-                    );
-                } catch (RuntimeException ignored) {
-                    connected = false;
-                }
-                if (!connected) {
-                    return RouteResolution.of(route, RouteStatus.WIRED_PATH_INVALID);
+            ValidationResult physicalResult = routeWireless
+                ? ComputeCableNetworkService.validateWirelessRoute(
+                    world,
+                    networkId,
+                    nodePos,
+                    line.anchor.position,
+                    distributorAnchor,
+                    matrixAnchor.position,
+                    line.coverage
+                )
+                : ComputeCableNetworkService.validateWiredRoute(
+                    world,
+                    networkId,
+                    nodePos,
+                    line.anchor.position,
+                    distributorAnchor,
+                    matrixAnchor.position
+                );
+            RouteStatus physicalStatus = mapPhysicalStatus(physicalResult);
+            lastPhysicalStatus = physicalStatus;
+            if (physicalStatus != RouteStatus.VALID) {
+                continue;
+            }
+
+            if (!routeWireless) {
+                ComputeWiredRouteValidator validator = wiredRouteValidator;
+                if (validator != null) {
+                    boolean connected;
+                    try {
+                        connected = validator.isConnected(
+                            world,
+                            networkId,
+                            nodeId,
+                            nodePos,
+                            line.anchor.position,
+                            distributorAnchor,
+                            matrixAnchor.position
+                        );
+                    } catch (RuntimeException ignored) {
+                        connected = false;
+                    }
+                    if (!connected) {
+                        lastPhysicalStatus = RouteStatus.WIRED_PATH_INVALID;
+                        continue;
+                    }
                 }
             }
+            return RouteResolution.of(route, RouteStatus.VALID);
         }
-        return RouteResolution.of(route, RouteStatus.VALID);
+        return RouteResolution.of(route, lastPhysicalStatus);
     }
 
     private static RouteStatus mapPhysicalStatus(final ValidationResult result) {
@@ -1330,10 +1427,12 @@ public final class ComputeNetworkService {
     }
 
     private static final class Topology {
-        private long matrixThroughput = UNLIMITED;
-        private int matrixMachineLimit;
+        private long legacyMatrixThroughput = UNLIMITED;
+        private int legacyMatrixMachineLimit;
+        private boolean hasLegacyMatrix;
         @Nullable
         private Anchor matrixAnchor;
+        private final List<MatrixConfig> matrices = new ArrayList<>();
         private final Map<String, InterfaceConfig> interfaces = new HashMap<>();
         private final Map<String, DistributorConfig> distributors = new HashMap<>();
         private final Map<String, RouteConfig> routes = new HashMap<>();
@@ -1346,9 +1445,28 @@ public final class ComputeNetworkService {
             }
             NBTTagCompound matrix = getCompound(root, MATRIX_TAG, false);
             if (matrix != null) {
-                topology.matrixThroughput = Math.max(0L, matrix.getLong(THROUGHPUT_TAG));
-                topology.matrixMachineLimit = Math.max(0, matrix.getInteger(MACHINE_LIMIT_TAG));
+                topology.hasLegacyMatrix = true;
+                topology.legacyMatrixThroughput = Math.max(0L, matrix.getLong(THROUGHPUT_TAG));
+                topology.legacyMatrixMachineLimit = Math.max(0, matrix.getInteger(MACHINE_LIMIT_TAG));
                 topology.matrixAnchor = Anchor.read(matrix);
+                if (topology.matrixAnchor != null) {
+                    topology.matrices.add(
+                        MatrixConfig.read(matrix, topology.matrixAnchor)
+                    );
+                }
+            }
+            NBTTagCompound matrices = getCompound(root, MATRICES_TAG, false);
+            if (matrices != null) {
+                for (String id : matrices.getKeySet()) {
+                    NBTTagCompound entry = getCompound(matrices, id, false);
+                    if (entry == null) {
+                        continue;
+                    }
+                    Anchor anchor = Anchor.read(entry);
+                    if (anchor != null) {
+                        topology.matrices.add(MatrixConfig.read(entry, anchor));
+                    }
+                }
             }
             NBTTagCompound interfaces = getCompound(root, INTERFACES_TAG, false);
             if (interfaces != null) {
@@ -1378,6 +1496,45 @@ public final class ComputeNetworkService {
                 }
             }
             return topology;
+        }
+
+        private List<Anchor> getActiveMatrixAnchors(
+            final World world,
+            final String networkId
+        ) {
+            List<Anchor> result = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+            for (MatrixConfig matrix : matrices) {
+                if (matrix.anchor == null
+                    || !seen.add(matrix.anchor.key())
+                    || !ComputeCableNetworkService.hasBoundMatrixEndpoint(
+                        world, networkId, matrix.anchor.position
+                    )) {
+                    continue;
+                }
+                result.add(matrix.anchor);
+            }
+            return result;
+        }
+    }
+
+    private static final class MatrixConfig {
+        private long throughput = UNLIMITED;
+        private int machineLimit;
+        private final Anchor anchor;
+
+        private MatrixConfig(final Anchor anchor) {
+            this.anchor = anchor;
+        }
+
+        private static MatrixConfig read(
+            final NBTTagCompound entry,
+            final Anchor anchor
+        ) {
+            MatrixConfig value = new MatrixConfig(anchor);
+            value.throughput = Math.max(0L, entry.getLong(THROUGHPUT_TAG));
+            value.machineLimit = Math.max(0, entry.getInteger(MACHINE_LIMIT_TAG));
+            return value;
         }
     }
 
@@ -1447,6 +1604,10 @@ public final class ComputeNetworkService {
         private Anchor(final int dimension, final BlockPos position) {
             this.dimension = dimension;
             this.position = position;
+        }
+
+        private String key() {
+            return dimension + ":" + position.toLong();
         }
 
         @Nullable

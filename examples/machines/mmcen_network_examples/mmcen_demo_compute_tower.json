@@ -1,6 +1,6 @@
 {
   "registryname": "mmcen_demo_compute_tower",
-  "localizedname": "§b算力矩阵（含分发节点演示）",
+  "localizedname": "\u7b97\u529b\u77e9\u9635\u6f14\u793a\u7ed3\u6784\uff08\u542b\u53ef\u9009\u5206\u652f\u4ea4\u6362\u8282\u70b9\uff09",
   "requires-blueprint": false,
   "color": "4AC7FF",
   "parts": [
@@ -49,7 +49,10 @@
       "y": 0,
       "z": -1,
       "elements": [
-        "mmcenetworks:wired_compute_interface"
+        "mmcenetworks:wired_compute_interface",
+        "mmcenetworks:wired_compute_interface_reinforced",
+        "mmcenetworks:wired_compute_interface_advanced",
+        "mmcenetworks:wired_compute_interface_elite"
       ]
     },
     {

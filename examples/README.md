@@ -11,8 +11,9 @@
 - `mmce_network_demo.zs`：基础示例，演示网络变量、资源池、算力占用和科技树。
 - `mmce_network_terminal_test.zs`：终端 GUI 测试示例，包含卡片式终端显示配置。
 - `README_terminal_test.md`：终端测试脚本的详细测试步骤。
-- `mmce_compute_network_demo.zs`：实时算力矩阵、接入端、分发节点和路由示例。
-- `README_compute_transport.md`：实体线缆、无线接入和分发节点的职责说明。
+- `mmce_compute_network_demo.zs`：实时算力矩阵、接入端、分支交换节点和路由示例。
+- `README_compute_transport.md`：实体线缆、无线接入和分支交换节点的职责说明。
+- `README_compute_port_tiers.md`：有线接入端口等级替换测试。
 - `README_compute_topology_test.md`：实时算力拓扑的详细测试步骤。
 - `machines/mmcen_network_examples/`：六台可直接复制到测试包的 MMCE 联调机器。
 

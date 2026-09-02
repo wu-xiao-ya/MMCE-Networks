@@ -199,6 +199,49 @@ public final class ComputeCableNetworkService {
         return ValidationResult.WIRED_PATH_INVALID;
     }
 
+    /**
+     * Returns the physical throughput published by wired interface endpoints
+     * belonging to one MMCE interface structure.
+     */
+    public static long getWiredInterfaceThroughput(
+        final World world,
+        final String networkId,
+        final BlockPos controllerPos
+    ) {
+        if (world == null || world.isRemote || networkId == null || networkId.isEmpty()
+            || controllerPos == null) {
+            return 0L;
+        }
+        long throughput = 0L;
+        for (BlockPos endpointPos : findEndpoints(
+            world, networkId, controllerPos, ComputeEndpointType.WIRED_INTERFACE
+        )) {
+            TileEntity tile = world.getTileEntity(endpointPos);
+            if (!(tile instanceof TileComputeEndpoint)) {
+                continue;
+            }
+            long endpointThroughput = ((TileComputeEndpoint) tile).getComputeThroughput();
+            if (endpointThroughput > 0L && throughput > Long.MAX_VALUE - endpointThroughput) {
+                return Long.MAX_VALUE;
+            }
+            throughput += endpointThroughput;
+        }
+        return throughput;
+    }
+
+    public static boolean hasBoundMatrixEndpoint(
+        final World world,
+        final String networkId,
+        final BlockPos controllerPos
+    ) {
+        return !findEndpoints(
+            world,
+            networkId,
+            controllerPos,
+            ComputeEndpointType.MATRIX
+        ).isEmpty();
+    }
+
     public static ValidationResult validateWirelessRoute(
         final World world,
         final String networkId,
